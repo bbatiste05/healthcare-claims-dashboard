@@ -1,28 +1,21 @@
-# Save this as app.py and run it with: streamlit run app.py
-
-import pandas as pd
 import streamlit as st
+from dashboards import cost_anomalies, fraud_detection, risk_scoring
 
-df = pd.read_csv("mock_claims.csv")
-df['charge_amount'] = pd.to_numeric(df['charge_amount'], errors='coerce')
-df.dropna(subset=['charge_amount'], inplace=True)
+from load_data import get_dataset
 
-# Aggregations
-top_dx = df.groupby('icd10')['charge_amount'].sum().sort_values(ascending=False)
-top_cpt = df.groupby('cpt')['charge_amount'].sum().sort_values(ascending=False)
-patient_totals = df.groupby('patient_id')['charge_amount'].sum()
+st.set_page_config(page_title="Healthcare Claims Dashboard", layout="wide")
 
-# Dashboard UI
-st.title("📊 Healthcare Claims Dashboard")
+st.title("🏥 Healthcare Claims Dashboard")
 
-st.subheader("Top Diagnoses by Total Cost")
-st.bar_chart(top_dx.head(3))
+df = get_dataset()
 
-st.subheader("Top Procedures by Total Cost")
-st.bar_chart(top_cpt.head(3))
+tab1, tab2, tab3 = st.tabs(["🧍 Risk Scoring", "💰 Cost Anomalies", "🕵️ Fraud Detection"])
 
-# Alerts
-st.subheader("⚠️ High-Cost Patients")
-threshold = st.slider("Set Cost Threshold", min_value=100, max_value=1000, value=500)
-alerts = patient_totals[patient_totals > threshold]
-st.write(alerts)
+with tab1:
+    risk_scoring.run(df)
+
+with tab2:
+    cost_anomalies.run(df)
+
+with tab3:
+    fraud_detection.run(df)
