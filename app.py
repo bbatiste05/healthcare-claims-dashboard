@@ -9,7 +9,7 @@ st.title("🏥 Healthcare Claims Dashboard")
 
 df = get_dataset()
 
-tab1, tab2, tab3 = st.tabs(["🧍 Risk Scoring", "💰 Cost Anomalies", "🕵️ Fraud Detection", "CPT Charge Audit"])
+tab1, tab2, tab3, tab4 = st.tabs(["🧍 Risk Scoring", "💰 Cost Anomalies", "🕵️ Fraud Detection", "CPT Charge Audit"])
 
 with tab1:
     risk_scoring.run(df)
