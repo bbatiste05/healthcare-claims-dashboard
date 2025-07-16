@@ -8,7 +8,7 @@ st.set_page_config(page_title="Healthcare Claims Dashboard", layout="wide")
 
 st.title("🏥 Healthcare Claims Dashboard")
 
-df = get_dataset()
+claims_df = get_dataset()
 
 tab = st.selectbox("Choose a dashboard:", [
     "🧍 Risk Scoring",
@@ -19,13 +19,13 @@ tab = st.selectbox("Choose a dashboard:", [
 ])
 
 if tab == "🧍 Risk Scoring":
-    risk_scoring.run(df)
+    risk_scoring.run(claims_df)
 elif tab == "💰 Cost Anomalies":
-    cost_anomalies.run(df)
+    cost_anomalies.run(claims_df)
 elif tab == "🕵️ Fraud Detection":
-    fraud_detection.run(df)
+    fraud_detection.run(claims_df)
 elif tab == "💥 CPT Charge Audit":
-    cpt_charge_audit.run(df)
+    cpt_charge_audit.run(claims_df)
 elif tab == "🤖 No-Show Predictor":
-    no_show_model.run(df) 
+    no_show_model.run() 
 
