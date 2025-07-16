@@ -37,6 +37,12 @@ def run(df):
 
     agg.columns = ['provider_id', 'avg_charge', 'avg_wait', 'avg_procedures']
 
+    # 🚧 If not enough providers after aggregation, show warning
+    if len(agg) < 3:
+        st.warning("⚠️ Not enough provider data (must have ≥3 providers with valid claims) to perform fraud detection.")
+        return
+
+
     # Run Isolation Forest
     model = IsolationForest(contamination=0.05, random_state=42)
     agg['anomaly_score'] = model.fit_predict(agg[['avg_charge', 'avg_wait', 'avg_procedures']])
@@ -55,4 +61,8 @@ def run(df):
         title="Provider Anomaly Detection (Isolation Forest)"
     )
     st.plotly_chart(fig, use_container_width=True)
+
+print(df['provider_id'].value_counts())
+print(df[['provider_id', 'charge_amount']].dropna().groupby('provider_id').size())
+
 
