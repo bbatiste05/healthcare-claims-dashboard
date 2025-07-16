@@ -31,8 +31,8 @@ def run(df=None):
 
     # Check if no_show column exists
     if 'no_show' not in df.columns:
-    st.error("❌ Missing required column: 'no_show'. Please check your CSV headers.")
-    st.stop()
+        st.error("❌ Missing required column: 'no_show'. Please check your CSV headers.")
+        st.stop()
     
     df['no_show'] = df['no_show'].map({'Yes': 1, 'No': 0})
     df['gender'] = LabelEncoder().fit_transform(df['gender'])
