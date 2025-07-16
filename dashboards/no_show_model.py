@@ -27,7 +27,7 @@ def run(df=None):
     df = df.copy()
 
     # Normalize column names
-    df.columns = df.columns.str.strip().str.lower().str.replace("-", "_")
+    df.columns = df.columns.str.strip().str.lower().str.replace("-", "_").str.replaced("\r", "")
 
     # Check if no_show column exists
     if 'no_show' not in df.columns:
