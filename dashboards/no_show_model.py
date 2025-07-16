@@ -8,8 +8,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-
- def run(df=None):
+def run(df=None):
     st.subheader("🤖 No-Show Prediction Model")
 
     # If no data provided, let user upload
@@ -26,18 +25,25 @@ import matplotlib.pyplot as plt
 
     # Step 1: Normalize column names
     df = df.copy()
-    df.columns = df.columns.str.strip().str.lower().str.replace("-", "_").str.replace("\r", "")
+    df.columns = df.columns.str.strip().str.lower().str.replace("-", "_").str.replace("\r", "").str.replace("\n", "")
 
-    # Debug: show actual column names seen by Streamlit
+    # DEBUG: Show actual column names
     st.write("🔍 Actual column names:", list(df.columns))
 
-    # Step 2: Check required column
+    # Check actual column names early
     if 'no_show' not in df.columns:
-        st.error("❌ Required column 'no_show' not found in uploaded file.")
+        st.error("❌ 'no_show' column not found. Here's what we found instead:")
+        st.write(df.columns.tolist())
         st.stop()
 
-    # Step 3: Encode
-    df['no_show'] = df['no_show'].map({'yes': 1, 'no': 0})
+
+    # Step 2: Validate required column
+    if 'no_show' not in df.columns:
+        st.error("❌ Required column 'no_show' not found. Please check the header in your CSV.")
+        st.stop()
+
+    # Step 3: Encode target and categorical features
+    df['no_show'] = df['no_show'].astype(str).str.strip().str.lower().map({'yes': 1, 'no': 0})
     df['gender'] = LabelEncoder().fit_transform(df['gender'])
 
     feature_cols = ['gender', 'age', 'wait_days', 'diabetic', 'hypertensive', 'sms_received']
@@ -83,3 +89,4 @@ import matplotlib.pyplot as plt
     results_df['Predicted'] = y_pred
     results_df['Predicted_Prob'] = y_prob
     st.dataframe(results_df.sort_values("Predicted_Prob", ascending=False).reset_index(drop=True))
+
