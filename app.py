@@ -27,5 +27,5 @@ elif tab == "🕵️ Fraud Detection":
 elif tab == "💥 CPT Charge Audit":
     cpt_charge_audit.run(df)
 elif tab == "🤖 No-Show Predictor":
-    no_show_model.run(df)  # New call
+    no_show_model.run(df) 
 
