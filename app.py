@@ -1,6 +1,6 @@
 import streamlit as st
 from load_data import get_dataset
-from dashboards import cost_anomalies, fraud_detection, risk_scoring, cpt_charge_audit
+from dashboards import cost_anomalies, fraud_detection, risk_scoring, cpt_charge_audit, no_show_model
 
 
 
@@ -10,16 +10,22 @@ st.title("🏥 Healthcare Claims Dashboard")
 
 df = get_dataset()
 
-tab1, tab2, tab3, tab4 = st.tabs(["🧍 Risk Scoring", "💰 Cost Anomalies", "🕵️ Fraud Detection", "CPT Charge Audit"])
+tab = st.selectbox("Choose a dashboard:", [
+    "🧍 Risk Scoring",
+    "💰 Cost Anomalies",
+    "🕵️ Fraud Detection",
+    "💥 CPT Charge Audit",
+    "🤖 No-Show Predictor"  # New tab
+])
 
-with tab1:
+if tab == "🧍 Risk Scoring":
     risk_scoring.run(df)
-
-with tab2:
+elif tab == "💰 Cost Anomalies":
     cost_anomalies.run(df)
-
-with tab3:
+elif tab == "🕵️ Fraud Detection":
     fraud_detection.run(df)
-
-with tab4:
+elif tab == "💥 CPT Charge Audit":
     cpt_charge_audit.run(df)
+elif tab == "🤖 No-Show Predictor":
+    no_show_model.run(df)  # New call
+
