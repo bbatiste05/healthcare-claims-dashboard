@@ -14,9 +14,8 @@ def run(df):
         lambda x: '⚠️ Overpriced' if x > 300 else '✅ Normal'
     )
 
-  # ✅ Fallback if provider_name doesn't exist
-cpt_avg['provider_name'] = "Provider " + cpt_avg['provider_id'].astype(str)
-
+    # Use placeholder names since provider_name column doesn’t exist
+    cpt_avg['provider_name'] = "Provider " + cpt_avg['provider_id'].astype(str)
 
     st.write("### ⚠️ Flagged CPTs by Provider (Over $300 Avg)")
     st.dataframe(cpt_avg.sort_values('avg_charge', ascending=False))
@@ -33,3 +32,4 @@ cpt_avg['provider_name'] = "Provider " + cpt_avg['provider_id'].astype(str)
         height=600
     )
     st.plotly_chart(fig, use_container_width=True)
+
