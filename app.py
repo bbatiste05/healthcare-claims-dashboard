@@ -18,14 +18,14 @@ tab = st.selectbox("Choose a dashboard:", [
     "🤖 No-Show Predictor"  # New tab
 ])
 
-if tab == "🧍 Risk Scoring":
+with tab == "🧍 Risk Scoring":
     risk_scoring.run(claims_df)
-elif tab == "💰 Cost Anomalies":
+with tab == "💰 Cost Anomalies":
     cost_anomalies.run(claims_df)
-elif tab == "🕵️ Fraud Detection":
+with tab == "🕵️ Fraud Detection":
     fraud_detection.run(claims_df)
-elif tab == "💥 CPT Charge Audit":
+with tab == "💥 CPT Charge Audit":
     cpt_charge_audit.run(claims_df)
-elif tab == "🤖 No-Show Predictor":
+with tab == "🤖 No-Show Predictor":
     no_show_model.run() 
 
