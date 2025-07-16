@@ -21,7 +21,7 @@ def run(df=None):
             st.stop() 
             
     st.write("### Preview of Data")
-    st.datafram(df.head())   
+    st.dataframe(df.head())   
     
     # Encode target and categorical features
     df = df.copy()
