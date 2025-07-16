@@ -18,7 +18,8 @@ def run(df=None):
         if uploaded_file:
             df = pd.read_csv(uploaded_file)
         else:
-            st.stop()
+            df = pd.read_csv("no_show.csv")
+            st.info("Using default no_show.csv")
 
     st.write("### Preview of Data")
     st.dataframe(df.head())
