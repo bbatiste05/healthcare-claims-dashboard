@@ -8,9 +8,10 @@ from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-def run(df=None):
+
+ def run(df=None):
     st.subheader("🤖 No-Show Prediction Model")
-    
+
     # If no data provided, let user upload
     if df is None:
         st.info("Upload a CSV file or use the sample no-show dataset.")
@@ -18,40 +19,39 @@ def run(df=None):
         if uploaded_file:
             df = pd.read_csv(uploaded_file)
         else:
-            st.stop() 
-            
+            st.stop()
+
     st.write("### Preview of Data")
-    st.dataframe(df.head())   
-    
-    # Encode target and categorical features
+    st.dataframe(df.head())
+
+    # Step 1: Normalize column names
     df = df.copy()
+    df.columns = df.columns.str.strip().str.lower().str.replace("-", "_").str.replace("\r", "")
 
-    # Normalize column names
-    df.columns = df.columns.str.strip().str.lower().str.replace("-", "_").str.replaced("\r", "")
+    # Debug: show actual column names seen by Streamlit
+    st.write("🔍 Actual column names:", list(df.columns))
 
-    # DEBUG: show what Streamlit is seeing
-    st.write("🔍 Actual column names in file:", list(df.columns))
-
-    # Check if no_show column exists
+    # Step 2: Check required column
     if 'no_show' not in df.columns:
-        st.error("❌ Missing required column: 'no_show'. Please check your CSV headers.")
+        st.error("❌ Required column 'no_show' not found in uploaded file.")
         st.stop()
-    
-    df['no_show'] = df['no_show'].map({'Yes': 1, 'No': 0})
+
+    # Step 3: Encode
+    df['no_show'] = df['no_show'].map({'yes': 1, 'no': 0})
     df['gender'] = LabelEncoder().fit_transform(df['gender'])
-    
+
     feature_cols = ['gender', 'age', 'wait_days', 'diabetic', 'hypertensive', 'sms_received']
     target_col = 'no_show'
 
     X = df[feature_cols]
     y = df[target_col]
 
-    # Split and train
+    # Step 4: Train/Test Split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     model = LogisticRegression()
     model.fit(X_train, y_train)
 
-    # Predict
+    # Step 5: Predict
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
 
@@ -77,10 +77,9 @@ def run(df=None):
     fig2 = px.bar(importance_df, x='Feature', y='Importance', title="Logistic Regression Feature Importance")
     st.plotly_chart(fig2, use_container_width=True)
 
-    # Show per-patient prediction
+    st.write("### 🧾 Patient-Level Predictions")
     results_df = X_test.copy()
     results_df['Actual'] = y_test.values
     results_df['Predicted'] = y_pred
     results_df['Predicted_Prob'] = y_prob
-    st.write("### 🧾 Patient-Level Predictions")
     st.dataframe(results_df.sort_values("Predicted_Prob", ascending=False).reset_index(drop=True))
