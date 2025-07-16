@@ -29,6 +29,9 @@ def run(df=None):
     # Normalize column names
     df.columns = df.columns.str.strip().str.lower().str.replace("-", "_").str.replaced("\r", "")
 
+    # DEBUG: show what Streamlit is seeing
+    st.write("🔍 Actual column names in file:", list(df.columns))
+
     # Check if no_show column exists
     if 'no_show' not in df.columns:
         st.error("❌ Missing required column: 'no_show'. Please check your CSV headers.")
