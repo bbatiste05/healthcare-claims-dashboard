@@ -18,6 +18,52 @@ An interactive Streamlit dashboard that analyzes mock healthcare claims data to 
 
 ---
 
+📂 How to Use This App
+This Streamlit dashboard requires CSV file uploads to function — no sample data is loaded by default.
+
+🏥 Claims Dashboard Tabs (Tabs 1–4)
+
+Upload a claims dataset via the sidebar
+Expected columns:
+provider_id
+charge_amount
+cpt (optional for CPT audit tab)
+These power:
+🧍 Risk Scoring
+💰 Cost Anomalies
+🕵️ Fraud Detection
+💥 CPT Charge Audit
+🤖 No-Show Predictor (Tab 5)
+
+Upload a separate CSV within the main window of the "No-Show Predictor" tab
+Expected columns:
+no_show (values should be "Yes" or "No")
+gender, age, wait_days, diabetic, hypertensive, sms_received
+The model performs:
+Logistic Regression
+Confusion Matrix + Report
+Feature Importance
+Per-patient Prediction Scoring
+✅ 2. Future Enhancements for the No-Show Model
+
+Ideas you can gradually integrate:
+
+🔘 Add patient filtering by age/gender
+🌳 Use RandomForestClassifier or XGBoost for comparison
+🧪 Add SHAP/Explainability for feature interpretation
+📈 Create time-series views by appointment_day
+✅ 3. GitHub & Streamlit Sharing Tips
+
+✅ Include Screenshots: Add visuals from each tab
+✅ Add Live Demo: Link to your Streamlit Cloud app
+✅ Post to Streamlit Community: Write a short project showcase
+✅ Consider GitHub Topics:
+#healthcare
+#streamlit
+#machine-learning
+#claims-analysis
+
+
 ## 📁 Project Structure
 .
 ├── app.py # Main Streamlit app with tabbed navigation
