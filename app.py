@@ -1,7 +1,7 @@
 import streamlit as st
+from load_data import get_dataset
 from dashboards import cost_anomalies, fraud_detection, risk_scoring, cpt_charge_audit
 
-from load_data import get_dataset
 
 st.set_page_config(page_title="Healthcare Claims Dashboard", layout="wide")
 
