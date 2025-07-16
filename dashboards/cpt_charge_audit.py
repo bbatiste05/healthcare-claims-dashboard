@@ -14,13 +14,9 @@ def run(df):
         lambda x: '⚠️ Overpriced' if x > 300 else '✅ Normal'
     )
 
-    # Merge provider name
-    if 'provider_id' in df.columns and 'provider_id' in cpt_avg.columns:
-        providers = df[['provider_id', 'provider_id']].drop_duplicates()
-        merged = pd.merge(cpt_avg, df[['provider_id', 'provider_id', 'provider_name']].drop_duplicates(), on='provider_id', how='left')
-        cpt_avg['provider_name'] = merged['provider_name']
-    else:
-        cpt_avg['provider_name'] = "Unknown"
+  # ✅ Fallback if provider_name doesn't exist
+cpt_avg['provider_name'] = "Provider " + cpt_avg['provider_id'].astype(str)
+
 
     st.write("### ⚠️ Flagged CPTs by Provider (Over $300 Avg)")
     st.dataframe(cpt_avg.sort_values('avg_charge', ascending=False))
