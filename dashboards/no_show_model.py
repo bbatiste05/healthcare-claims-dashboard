@@ -28,8 +28,7 @@ def run(df=None):
     df = df.copy()
     df.columns = df.columns.str.strip().str.lower().str.replace("-", "_").str.replace("\r", "").str.replace("\n", "")
 
-    # DEBUG: Show actual column names
-    st.write("🔍 Actual column names:", list(df.columns))
+
 
     # Check actual column names early
     if 'no_show' not in df.columns:
