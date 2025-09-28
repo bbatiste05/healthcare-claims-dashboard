@@ -1,3 +1,4 @@
+# core
 streamlit>=1.22
 pandas
 plotly
@@ -5,3 +6,7 @@ scikit-learn
 matplotlib
 seaborn
 numpy
+
+# optional for model
+tiktoken
+chromadb
