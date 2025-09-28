@@ -1,6 +1,7 @@
 import streamlit as st
 from load_data import get_dataset
 from dashboards import cost_anomalies, fraud_detection, risk_scoring, cpt_charge_audit, no_show_model
+from dashboards import copilot_ui
 
 st.set_page_config(page_title="Healthcare Claims Dashboard", layout="wide")
 
@@ -13,7 +14,8 @@ tab = st.selectbox("Choose a dashboard:", [
     "💰 Cost Anomalies",
     "🕵️ Fraud Detection",
     "💥 CPT Charge Audit",
-    "🤖 No-Show Predictor"
+    "🤖 No-Show Predictor",
+    "🚀 CoPilot (Chat)"
 ])
 
 if tab == "🧍 Risk Scoring":
@@ -30,4 +32,7 @@ elif tab == "💥 CPT Charge Audit":
 
 elif tab == "🤖 No-Show Predictor":
     no_show_model.run()  # Allow file upload here
+
+with tab == "🚀 CoPilot (Chat)":
+    copilot_ui.run(claims-df)
 
