@@ -1,0 +1,10 @@
+
+question,expected
+Which 10 CPTs explain 80% of outpatient spend in Q2 2024?,Pareto table + cost share
+List providers with Z>=3 on CPT 99213 in TX; add volumes and paid amounts.,Outlier table with zscore
+Why is risk rising in Plan COMM? Summarize top ICDs driving HCCs.,Risk summary with ICD context
+Compare Cardiology cost Q2->Q3 and explain variance.,Variance explanation with numbers
+Flag providers with excessive claims per patient in the last 90 days.,Fraud flags + rationale
+Show a chart of monthly spend for CPT 97110 and annotate anomaly months.,Trend figure + notes
+Which patients newly crossed high-risk threshold? Provide de-identified indicators.,De-identified list + reasons
+Explain ICD I10 and CPT 99213 in plain language with sources.,Code descriptions + sources
