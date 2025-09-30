@@ -5,6 +5,11 @@ import pandas as pd
 from .prompts import SYSTEM_PROMPT, FEW_SHOTS
 from .tools import top_icd_cpt_cost, provider_anomalies, fraud_flags, risk_scoring
 from .rag import SimpleRAG
+import streamlit as st
+from openai import OpenAI
+
+client = OpenAI(api_key=os.environ.get("OPEN_API_KEY"])
+model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
 
 def handle_query(user_q: str, df: pd.DataFrame, rag: SimpleRAG):
     """Very simple intent routing without LLM calls—acts as a placeholder for your GPT."
