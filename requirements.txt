@@ -10,3 +10,4 @@ numpy
 # optional for model
 tiktoken
 chromadb
+openai>=1.40.0
