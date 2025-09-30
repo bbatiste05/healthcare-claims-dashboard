@@ -33,6 +33,6 @@ elif tab == "💥 CPT Charge Audit":
 elif tab == "🤖 No-Show Predictor":
     no_show_model.run()  # Allow file upload here
 
-with tab == "🚀 CoPilot (Chat)":
+elif tab == "🚀 CoPilot (Chat)":
     copilot_ui.run(claims-df)
 
