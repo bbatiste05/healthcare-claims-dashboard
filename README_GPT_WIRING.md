@@ -2,7 +2,7 @@
 # GPT Wiring Pack
 
 ## Files
-- copilot/agent_gpt.py → OpenAI function-calling agent that calls your tools.
+- copilot/agent.py → OpenAI function-calling agent that calls your tools.
 - data/external/icd10.csv, cpt.csv, nppes.csv → tiny subsets for RAG (replace later with official sources).
 
 ## How to use
