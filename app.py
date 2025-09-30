@@ -34,5 +34,5 @@ elif tab == "🤖 No-Show Predictor":
     no_show_model.run()  # Allow file upload here
 
 elif tab == "🚀 CoPilot (Chat)":
-    copilot_ui.run(claims-df)
+    copilot_ui.run(claims_df)
 
