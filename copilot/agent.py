@@ -130,7 +130,8 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
         st.write("Key prefix:", st.secrets["OPENAI_API_KEY"][:10])
 
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
+    
+try:
     resp = client.chat.completions.create(
         model="gpt-4.1-mini",
         messages=[
@@ -142,9 +143,10 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
     # Extract the assistant's text
     answer = resp.choices[0].message.content
-
+    
+except openai.RateLimitError:
     return {
-        "summary": [answer],
+        "summary": ["Rate limit reached. Please wait a few seconds and try again"],
         "tables": [],
         "figures": [],
         "citations": [],
