@@ -126,6 +126,11 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
     messages = _messages(user_q, rag)
     tools = _tools_schema()
 
+    import pprint
+    st.write("Deug: model =", model)
+    st.write("Debug: first message =", messages[0])
+    st.write("Debug: tool scheme=", tools[0])
+
     resp = client.responses.create(
         model=model,
         input=messages,
