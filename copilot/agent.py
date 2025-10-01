@@ -118,19 +118,27 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
     return {"error": f"Unknown tool: {name}"}
 
 
-def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG):
+def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
+    """Temporary simplified version using Chat Completions for debugging."""
+
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    model = st.secrets.get("OPENAI_MODEL", "gpt-4.1-mini")
 
-    test_messages = [
-        {"role": "user", "content": [{"type": "input_text", "text": "Hello, world"}]}
-    ]
-
-    chat_resp = client.chat.completions.create(
+    resp = client.chat.completions.create(
         model="gpt-4.1-mini",
-        messages=[{"role": "user", "content": [{"Hello"}]
+        messages=[
+            {"role": "system", "content": "You are Healthcare Claims Copilot."},
+            {"role": "user", "content": user_q}
+        ],
+        temperature=0.2
     )
 
-    st.write("DEBUG raw response:", resp)
-    return {"summary": [resp.output_text], "tables": [], "figures": [], "citations": [], "next_steps": []}
+    # Extract the assistant's text
+    answer = resp.choices[0].message.content
 
+    return {
+        "summary": [answer],
+        "tables": [],
+        "figures": [],
+        "citations": [],
+        "next_steps": []
+    }
