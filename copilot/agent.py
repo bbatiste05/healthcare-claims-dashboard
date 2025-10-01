@@ -143,7 +143,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
         )
 
         # Extract the assistant's text
-        answer = resp.choices[0].message["content"]
+        answer = resp.choices[0].message.content or "⚠️ No response received."
 
         return {
             "summary": [answer],
