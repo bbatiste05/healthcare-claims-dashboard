@@ -128,11 +128,9 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
         st.stop()
     else:
         st.write("✅ Key loaded, length:", len(key))
-        st.write("Key prefix:", st.secrets["OPENAI_API_KEY"][:10])
+        st.write("Key prefix:", key[:10])
 
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    
-
+    client = OpenAI(api_key=key)
 
     try:
         resp = client.chat.completions.create(
@@ -144,8 +142,8 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             temperature=0.2
         )
 
-    # Extract the assistant's text
-    answer = resp.choices[0].message["content"]
+        # Extract the assistant's text
+        answer = resp.choices[0].message["content"]
 
         return {
             "summary": [answer],
