@@ -25,5 +25,14 @@ Your job is to:
 # - "Be safe: aggregate PHI" → covers HIPAA-sensitive use case
 # - "Clarification if cannot answer" → ensures safe fallback instead of hallucinations
 
+# === FEW-SHOT EXAMPLES ===
+FEW_SHOTS = []
+
+# === ANNOTATION ===
+# Each few-shot does 3 things:
+# 1. Shows GPT the JSON schema you expect (summary, tables, figures, citations, next_steps).
+# 2. Demonstrates tool use: first example → cost_drivers, second → provider_outliers.
+# 3. Provides realistic next steps an analyst would take, which improves actionability.
+
 
 # 3. Provides realistic next steps an analyst would take, which improves actionability.
