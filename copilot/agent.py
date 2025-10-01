@@ -3,6 +3,7 @@
 import json
 import pandas as pd
 import streamlit as st
+import openai
 from typing import Dict, Any, List
 from openai import OpenAI
 
@@ -132,7 +133,6 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     
 
-import openai
 
     try:
         resp = client.chat.completions.create(
