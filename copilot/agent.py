@@ -118,56 +118,19 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
     return {"error": f"Unknown tool: {name}"}
 
 
-def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
-    """Main entrypoint for the GPT-enabled agent."""
+def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG):
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     model = st.secrets.get("OPENAI_MODEL", "gpt-4.1-mini")
 
-    messages = _messages(user_q, rag)
-    tools = _tools_schema()
-
-    import pprint
-    st.write("Deug: model =", model)
-    st.write("Debug: first message =", messages[0])
-    st.write("Debug: tool scheme=", tools[0])
+    test_messages = [
+        {"role": "user", "content": [{"type": "input_text", "text": "Hello, world"}]}
+    ]
 
     resp = client.responses.create(
         model=model,
-        input=messages,
-        tools=tools,
-        tool_choice="auto",
-        temperature=0.2,
+        input=test_messages
     )
 
-    result_payload = {"summary": [], "tables": [], "figures": [], "citations": [], "next_steps": []}
+    st.write("DEBUG raw response:", resp)
+    return {"summary": [resp.output_text], "tables": [], "figures": [], "citations": [], "next_steps": []}
 
-    for item in resp.output:
-        if item.type == "message" and item.message.tool_calls:
-            for tc in item.message.tool_calls:
-                fn = tc.function.name
-                args = json.loads(tc.function.arguments or "{}")
-                tool_result = _call_tool(fn, args, df)
-
-                follow = client.responses.create(
-                    model=model,
-                    input=[
-                        *messages,
-                        {"role": "assistant", "content": "", "tool_calls": [{"id": tc.id, "function": {"name": fn, "arguments": tc.function.arguments}}]},
-                        {"role": "tool", "content": json.dumps(tool_result, default=str), "tool_call_id": tc.id},
-                        #{"role": "user", "content": "Format the final answer as JSON with keys: summary, tables, figures, citations, next_steps."}
-                    ],
-                    temperature=0.2
-                )
-                for out in follow.output:
-                    if out.type == "message" and out.message.content:
-                        try:
-                            text = out.message.content[0].text
-                            parsed = json.loads(text)
-                            for k in result_payload.keys():
-                                result_payload[k] = parsed.get(k, result_payload[k])
-                            return result_payload
-                        except Exception:
-                            pass
-
-    result_payload["summary"].append("No tools invoked. Try specifying CPT/ICD/time window.")
-    return result_payload
