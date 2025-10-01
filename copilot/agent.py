@@ -77,23 +77,33 @@ def _tools_schema() -> List[Dict[str, Any]]:
 def _messages(user_q: str, rag: SimpleRAG) -> list:
     snippets = rag.search(user_q, k=5)
     snip_text = "\n".join([json.dumps(s, ensure_ascii=False) for s in snippets])
-    
+
     msgs = [
-        {"role": "system", "content": [{"type": "text", "text": SYSTEM_PROMPT}
+        {"role": "system", "content": [{"type": "text", "text": SYSTEM_PROMPT}]}
     ]
-         
+
     for ex in FEW_SHOTS:
-        msgs.append({"role": "user", "content": ex["user"]})
         msgs.append({
-            "role": "assistant", 
-            "content": [{"type": "text", "text": "Use tools as needed. Return structured JSON."
+            "role": "user",
+            "content": [{"type": "text", "text": ex["user"]}]
         })
+        msgs.append({
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Use tools as needed. Return structured JSON."}]
+        })
+
     msgs.append({
-        "role": "system", 
+        "role": "system",
         "content": [{"type": "text", "text": f"External context (ICD/CPT/NPPES snippets):\n{snip_text}"}]
     })
-    msgs.append({"role": "user", "content": [{"type": "text", "text": user_q})
+
+    msgs.append({
+        "role": "user",
+        "content": [{"type": "text", "text": user_q}]
+    })
+
     return msgs
+
 
 
 def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
