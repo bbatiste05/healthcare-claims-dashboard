@@ -6,9 +6,9 @@ import streamlit as st
 from typing import Dict, Any, List
 from openai import OpenAI
 
-from copilot.prompts import SYSTEM_PROMPT, FEW_SHOTS
-from copilot.tools import top_icd_cpt_cost, provider_anomalies, fraud_flags, risk_scoring
-from copilot.rag import SimpleRAG
+from .prompts import SYSTEM_PROMPT, FEW_SHOTS
+from .tools import top_icd_cpt_cost, provider_anomalies, fraud_flags, risk_scoring
+from .rag import SimpleRAG
 
 def _tools_schema() -> List[Dict[str, Any]]:
     return [
