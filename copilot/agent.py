@@ -127,8 +127,8 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG):
     ]
 
     resp = client.responses.create(
-        model=model,
-        input=test_messages
+        model="gpt-4.1-mini",
+        input=[{"role": "user", "content": [{"type": "input_text", "text": "Hello"}]}]
     )
 
     st.write("DEBUG raw response:", resp)
