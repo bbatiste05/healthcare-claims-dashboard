@@ -129,7 +129,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                         *messages,
                         {"role": "assistant", "content": "", "tool_calls": [{"id": tc.id, "function": {"name": fn, "arguments": tc.function.arguments}}]},
                         {"role": "tool", "content": json.dumps(tool_result, default=str), "tool_call_id": tc.id},
-                        {"role": "user", "content": "Format the final answer as JSON with keys: summary, tables, figures, citations, next_steps."}
+                        #{"role": "user", "content": "Format the final answer as JSON with keys: summary, tables, figures, citations, next_steps."}
                     ],
                     temperature=0.2
                 )
