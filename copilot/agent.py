@@ -79,7 +79,7 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
     snip_text = "\n".join([json.dumps(s, ensure_ascii=False) for s in snippets])
 
     msgs = [
-        {"role": "system", "content": [{"type": "input_text", "text": SYSTEM_PROMPT}]}
+        {"role": "system", "content": [{"type": "output_text", "text": SYSTEM_PROMPT}]}
     ]
 
     for ex in FEW_SHOTS:
@@ -94,7 +94,7 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
 
     msgs.append({
         "role": "system",
-        "content": [{"type": "input_text", "text": f"External context (ICD/CPT/NPPES snippets):\n{snip_text}"}]
+        "content": [{"type": "output_text", "text": f"External context (ICD/CPT/NPPES snippets):\n{snip_text}"}]
     })
 
     msgs.append({
@@ -103,7 +103,6 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
     })
 
     return msgs
-
 
 
 
