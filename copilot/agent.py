@@ -121,12 +121,12 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
 def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
     """Temporary simplified version using Chat Completions for debugging."""
 
-key = st.secrets.get("OPENAI_API_KEY")
-if not key:
-    st.error("❌ No API key found in secrets")
-    st.stop()
-else:
-    st.write("✅ Key loaded, length:", len(key))
+    key = st.secrets.get("OPENAI_API_KEY")
+    if not key:
+        st.error("❌ No API key found in secrets")
+        st.stop()
+    else:
+        st.write("✅ Key loaded, length:", len(key))
 
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
