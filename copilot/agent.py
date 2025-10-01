@@ -126,9 +126,9 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG):
         {"role": "user", "content": [{"type": "input_text", "text": "Hello, world"}]}
     ]
 
-    resp = client.responses.create(
+    chat_resp = client.chat.completions.create(
         model="gpt-4.1-mini",
-        input=[{"role": "user", "content": [{"type": "input_text", "text": "Hello"}]}]
+        messages=[{"role": "user", "content": [{"Hello"}]
     )
 
     st.write("DEBUG raw response:", resp)
