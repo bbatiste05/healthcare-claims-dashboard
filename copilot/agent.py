@@ -134,32 +134,32 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
 import openai
 
-try:
-    resp = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {"role": "system", "content": "You are Healthcare Claims Copilot."},
-            {"role": "user", "content": user_q}
-        ],
-        temperature=0.2
-    )
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": "You are Healthcare Claims Copilot."},
+                {"role": "user", "content": user_q}
+            ],
+            temperature=0.2
+        )
 
     # Extract the assistant's text
     answer = resp.choices[0].message["content"]
 
-    return {
-        "summary": [answer],
-        "tables": [],
-        "figures": [],
-        "citations": [],
-        "next_steps": []
-    }
+        return {
+            "summary": [answer],
+            "tables": [],
+            "figures": [],
+            "citations": [],
+            "next_steps": []
+        }
 
-except openai.RateLimitError:
-    return {
-        "summary": ["⚠️ Rate limit reached. Please wait a few seconds and try again."],
-        "tables": [],
-        "figures": [],
-        "citations": [],
-        "next_steps": []
-    }
+    except openai.RateLimitError:
+        return {
+            "summary": ["⚠️ Rate limit reached. Please wait a few seconds and try again."],
+            "tables": [],
+            "figures": [],
+            "citations": [],
+            "next_steps": []
+        }
