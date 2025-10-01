@@ -1,5 +1,5 @@
 import streamlit as st
-st.write("Secrets loaded:", OPENAI_API_KEY" in st.secrets)
+st.write("Secrets loaded:", "OPENAI_API_KEY" in st.secrets)
 from load_data import get_dataset
 from dashboards import cost_anomalies, fraud_detection, risk_scoring, cpt_charge_audit, no_show_model
 from dashboards import copilot_ui
