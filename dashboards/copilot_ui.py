@@ -38,8 +38,7 @@ def run(claims_df):
                 st.write(f"**{tbl['name'].capitalize()}**")
             if isinstance(tbl, list):
                 st.dataframe(pd.DataFrame(tbl))
-            else:
-                st.write("⚠️ No rows found for this table.")
+       
 
     # 4) Render next steps
     if result.get("next_steps"):
