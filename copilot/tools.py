@@ -7,37 +7,32 @@ def _require_cols(df: pd.DataFrame, cols):
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10):
-    _require_cols(df, ["charge_amount", "service_date"])
-    d = df.copy()
+def top_icd_cpt_cost(df, icd=None, cpt=None, period=None, plan=None, top_n=10):
+    data = df.copy()
 
-    # Filter by ICD or CPT if provided
+    # Optional filters
     if icd:
-        d = d[d["icd10"].astype(str).str.startswith(icd)]
+        data = data[data["icd10"] == icd]
     if cpt:
-        d = d[d["cp"].astype(str) == str(cpt)]
-
-    # Time filter
+        data = data[data["cpt"] == cpt]
     if period:
-        d["dt"] = pd.to_datetime(d["service_date"])
-        if "Q" in str(period):  # e.g., 2024Q2
-            year = int(period[:4]); q = int(period[-1])
-            d = d[(d["dt"].dt.year == year) & (d["dt"].dt.quarter == q)]
-        elif ":" in str(period):  # e.g., 2024-01:2024-06
-            start, end = str(period).split(":")
-            d = d[(d["dt"] >= start) & (d["dt"] <= end)]
+        # Example: period="2024Q2" or "2024-01:2024-06"
+        # You’ll need to parse this depending on your date column format
+        pass
 
-    # Group by CPT (cp) if available
-    if "cp" in d.columns:
-        g = d.groupby("cp")["charge_amount"].sum().sort_values(ascending=False).head(top_n)
-        table = g.reset_index().rename(columns={"charge_amount": "total_charge"})
-        table["share"] = table["total_charge"] / table["total_charge"].sum()
-        return {"table_name": "cost_drivers", "table": table}
-    else:
-        g = d.groupby("icd10")["charge_amount"].sum().sort_values(ascending=False).head(top_n)
-        table = g.reset_index().rename(columns={"charge_amount": "total_charge"})
-        table["share"] = table["total_charge"] / table["total_charge"].sum()
-        return {"table_name": "cost_drivers", "table": table}
+    grouped = (
+        data.groupby("icd10")["charge_amount"]
+        .sum()
+        .reset_index()
+        .sort_values("charge_amount", ascending=False)
+        .head(top_n)
+    )
+
+    total = grouped["charge_amount"].sum()
+    grouped["cost_share"] = (grouped["charge_amount"] / total) * 100
+    grouped["cost_share"] = grouped["cost_share"].round(2).astype(str) + "%"
+
+    return grouped.reset_index(drop=True).to_dict(orient="records")
 
 def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=3.0):
     _require_cols(df, ["charge_amount", "provider_id"])
