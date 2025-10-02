@@ -120,14 +120,22 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
 
 
 def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
-    """Experiment 2: Few-shot prompting to enforce JSON-style outputs."""
+    """Experiment 3: Structured enforcement. Always return valid JSON."""
 
     key = st.secrets.get("OPENAI_API_KEY")
     client = OpenAI(api_key=key)
 
-    # Build messages with few-shots
+    # Messages: System + Few-shots + User
     messages = [
-        {"role": "system", "content": "You are Healthcare Claims Copilot. Answer questions using structured JSON output with keys: summary, tables, figures, citations, next_steps."}
+        {
+            "role": "system",
+            "content": (
+                "You are Healthcare Claims Copilot. "
+                "Always respond in valid JSON with the keys: "
+                "summary, tables, figures, citations, next_steps. "
+                "If you cannot answer, return empty lists and explain in summary."
+            ),
+        }
     ]
 
     for ex in FEW_SHOTS:
@@ -145,13 +153,18 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
         answer = resp.choices[0].message.content or "{}"
 
-        # Try parsing JSON-like content
+        # Enforce JSON parsing
         try:
             parsed = json.loads(answer)
         except Exception:
-            parsed = {"summary": [answer]}
+            parsed = {
+                "summary": ["⚠️ Model did not return valid JSON."],
+                "tables": [],
+                "figures": [],
+                "citations": [],
+                "next_steps": []
+            }
 
-        # Return structured payload
         return {
             "summary": parsed.get("summary", []),
             "tables": parsed.get("tables", []),
