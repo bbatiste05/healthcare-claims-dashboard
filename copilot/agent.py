@@ -149,26 +149,29 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
     messages.append({"role": "user", "content": user_q})
 
+    result_payload = {"summary": [], "tables": [], "figures": [], "citations": [], "next_steps": []}
+
     try:
         # 3. Call GPT with tool schemas
         resp = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=messages,
-            tools=_tools_schema(),   # <-- from your agent.py
+            tools=_tools_schema(),
             tool_choice="auto",
             temperature=0.2
         )
 
-        result_payload = {"summary": [], "tables": [], "figures": [], "citations": [], "next_steps": []}
+        tool_used = False
 
         # 4. Check if a tool was invoked
         for choice in resp.choices:
             msg = choice.message
             if msg.tool_calls:
+                tool_used = True
                 for tc in msg.tool_calls:
                     fn = tc.function.name
                     args = json.loads(tc.function.arguments or "{}")
-                    tool_result = _call_tool(fn, args, df)  # <-- runs Python function
+                    tool_result = _call_tool(fn, args, df)
 
                     # 5. Feed tool result back into GPT for final formatting
                     follow = client.chat.completions.create(
@@ -182,7 +185,6 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                         temperature=0.2
                     )
 
-                    # Parse final JSON
                     final_answer = follow.choices[0].message.content
                     try:
                         parsed = json.loads(final_answer)
@@ -191,9 +193,11 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                                 result_payload[k] = [parsed.get(k)]
                             else:
                                 result_payload[k] = parsed.get(k, result_payload[k])
+                        return result_payload  # ✅ return immediately after parsing
 
-        # Fallback if no tools used
-        result_payload["summary"].append("No tools invoked. Try specifying CPT/ICD/time window.")
+        # 6. Fallback if no tools used
+        if not tool_used:
+            result_payload["summary"].append("No tools invoked. Try specifying CPT/ICD/time window.")
         return result_payload
 
     except openai.RateLimitError:
