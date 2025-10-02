@@ -119,7 +119,7 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
     return {"error": f"Unknown tool: {name}"}
 
 
-def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG): -> Dict[str, Any]:
+def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
     """Experiment 4: Tool + RAG + structured JSON."""
 
     key = st.secrets.get("OPENAI_API_KEY")
