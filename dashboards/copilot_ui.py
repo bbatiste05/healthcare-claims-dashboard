@@ -23,7 +23,7 @@ def run(claims_df):
     result = ask_gpt(user_q, claims_df, rag)
 
     # 2) Render the summary
-   st.subheader("Answer")
+    st.subheader("Answer")
 
     summaries = result.get("summary", [])
     if summaries:
@@ -31,6 +31,7 @@ def run(claims_df):
             st.markdown(s)
     else:
         st.info("No summary available.")
+
 
 
     # 3) Render tables (if any)
