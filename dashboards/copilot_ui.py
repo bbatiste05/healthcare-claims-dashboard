@@ -2,14 +2,8 @@
 import streamlit as st
 import pandas as pd
 
-from copilot.agent import ask_gpt as handle_query
+from copilot.agent import ask_gpt
 from copilot.rag import SimpleRAG
-from copilot import tools as copilot_tools
-
-
-def _render_table(df: pd.DataFrame, caption: str):
-    st.caption(caption)
-    st.dataframe(df, use_container_width=True)
 
 
 def run(claims_df):
@@ -25,32 +19,37 @@ def run(claims_df):
     result = ask_gpt(user_q, claims_df, rag)
 
     # 2) Render the summary
-    summary_text = " ".join(result.get("summary", []))
-    st.markdown(f"**Answer**\n\n{summary_text}")
     st.subheader("Answer")
-    st.write(" ".join(result.get("summary", [])))
+    summaries = result.get("summary", [])
+    if summaries:
+        for s in summaries:
+            st.markdown(s)
+    else:
+        st.info("No summary available.")
 
-
-
-
-    # 3) Render tables (if any)
+    # 3) Render tables
     if result.get("tables"):
         st.subheader("📊 Tables")
         for tbl in result["tables"]:
-            # If it's a list of dicts, treat as rows
+            # If it's already a list of dicts → build DataFrame
             if isinstance(tbl, list) and all(isinstance(row, dict) for row in tbl):
-                st.dataframe(pd.DataFrame(tbl))
-            # If it's a dict with metadata
-            elif isinstance(tbl, dict) and "name" in tbl:
-                st.write(f"**{tbl['name'].capitalize()}** (no row data returned)")
+                df = pd.DataFrame(tbl)
+                st.dataframe(df, use_container_width=True)
+            # If it's a dict (single row) → wrap in list → DataFrame
+            elif isinstance(tbl, dict):
+                df = pd.DataFrame([tbl])
+                st.dataframe(df, use_container_width=True)
             else:
-                st.json(tbl)  # fallback debug
+                st.json(tbl)  # fallback (debugging)
 
     # 4) Render next steps
-        st.subheader("Next Steps")
-        for step in result.get("next_steps", []):
+    if result.get("next_steps"):
+        st.subheader("✅ Next Steps")
+        for step in result["next_steps"]:
             st.write("•", step)
 
     # 5) Render citations
-        st.subheader("Citations")
-        st.write(", ".join(result.get("citations"[])))
+    if result.get("citations"):
+        st.subheader("📚 Citations")
+        st.write(", ".join(result["citations"]))
+ns"[])))
