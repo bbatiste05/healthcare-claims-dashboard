@@ -15,6 +15,8 @@ Your job is to:
 - Return results in structured JSON with keys: summary, tables, figures, citations, next_steps.
 - Be safe: do not reveal PHI directly; aggregate patient-level results if fewer than 10 patients are in a group.
 - If the question cannot be answered, respond with a helpful clarification request instead of guessing.
+- Always include at least one table with structured rows in the 'tables' key.
+- Tables must be a list of objects (rows), not a single dict or free text.
 """
 
 # === ANNOTATION ===
