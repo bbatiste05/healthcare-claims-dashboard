@@ -25,6 +25,8 @@ def run(claims_df):
     result = ask_gpt(user_q, claims_df, rag)
 
     # 2) Render the summary
+    summary_text = " ".join(result.get("summary", []))
+    st.markdown(f"**Answer**\n\n{summary_text}")
     st.subheader("Answer")
     st.write(" ".join(result.get("summary", [])))
 
