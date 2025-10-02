@@ -17,7 +17,7 @@ def run(claims_df):
     if not user_q:
         return
 
-    rag = SimpleRAG(claims_df)
+    rag = SimpleRAG("data/")
 
     # 1) Get structured answer
     result = ask_gpt(user_q, claims_df, rag)
