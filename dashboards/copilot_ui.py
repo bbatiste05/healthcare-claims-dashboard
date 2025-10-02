@@ -32,10 +32,12 @@ def run(claims_df):
 
     # 3) Render tables (if any)
     if result.get("tables"):
-        for table in result["tables"]:
-            st.subheader(f"Table: {table.get('name', 'Unnamed')}")
-            if "rows" in table:
-                st.table(table["rows"])
+        st.subheader(" Tables")
+        for tbl in result["tables"]:
+            if isinstance(tbl, dict) and "name" in tbl:
+                st.write(f"**{tbl['name'].capitalize()}**")
+            if isinstance(tbl, list):
+                st.dataframe(pd.DataFrame(tbl))
             else:
                 st.write("⚠️ No rows found for this table.")
 
