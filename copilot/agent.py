@@ -175,15 +175,26 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 final_answer = follow.choices[0].message.content
                 try:
                     parsed = json.loads(final_answer)
+
+                    # Normalize each key
                     for k in result_payload.keys():
                         if isinstance(parsed.get(k), str):
                             result_payload[k] = [parsed.get(k)]
                         else:
                             result_payload[k] = parsed.get(k, result_payload[k])
+
+                    # 🔧 Extra patch: normalize tables so they’re always list[dict]
+                    if "tables" in result_payload:
+                        fixed_tables = []
+                        for t in result_payload["tables"]:
+                            if isinstance(t, dict):
+                                fixed_tables.append(t)
+                            elif isinstance(t, list):
+                                fixed_tables.extend(t)
+                        result_payload["tables"] = fixed_tables
+
                     return result_payload
-                except Exception:
-                    result_payload["summary"].append(final_answer)
-                    return result_payload
+
 
         # 4. Fallback if no tools invoked
         result_payload["summary"].append(msg.content or "No tools invoked.")
