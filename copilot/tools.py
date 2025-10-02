@@ -8,31 +8,22 @@ def _require_cols(df: pd.DataFrame, cols):
         raise ValueError(f"Missing required columns: {missing}")
 
 def top_icd_cpt_cost(df, icd=None, cpt=None, period=None, plan=None, top_n=10):
-    data = df.copy()
-
-    if icd:
-        data = data[data["icd10"] == icd]
-    if cpt:
-        data = data[data["cpt"] == cpt]
+    # If CPT column has data, prefer it
+    if "cpt" in df.columns and df["cpt"].notna().any():
+        group_col = "cpt"
+    else:
+        group_col = "icd10"
 
     grouped = (
-        data.groupby("icd10")["charge_amount"]
-        .sum()
-        .reset_index()
-        .sort_values("charge_amount", ascending=False)
-        .head(top_n)
+        df.groupby(group_col)["charge_amount"]
+          .sum()
+          .reset_index()
+          .sort_values("charge_amount", ascending=False)
+          .head(top_n)
     )
-
-    total = grouped["charge_amount"].sum()
-    grouped["Cost Share (%)"] = (grouped["charge_amount"] / total * 100).round(2)
-
-    grouped = grouped.rename(columns={
-        "icd10": "ICD-10 Code",
-        "charge_amount": "Total Cost"
-    })
-
-    # 🔑 Return list of dicts
+    grouped["Cost Share (%)"] = grouped["charge_amount"] / grouped["charge_amount"].sum() * 100
     return grouped.to_dict(orient="records")
+
 
 
 
