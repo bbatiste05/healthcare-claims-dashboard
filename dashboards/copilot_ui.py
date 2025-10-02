@@ -23,12 +23,15 @@ def run(claims_df):
     result = ask_gpt(user_q, claims_df, rag)
 
     # 2) Render the summary
-    st.subheader("Answer")
-    summary_text = " ".join(result.get("summary", []))
-    if summary_text.strip():
-        st.markdown(summary_text)
+   st.subheader("Answer")
+
+    summaries = result.get("summary", [])
+    if summaries:
+        for s in summaries:
+            st.markdown(s)
     else:
         st.info("No summary available.")
+
 
     # 3) Render tables (if any)
     if result.get("tables"):
