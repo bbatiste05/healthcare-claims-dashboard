@@ -26,7 +26,28 @@ Your job is to:
 # - "Clarification if cannot answer" → ensures safe fallback instead of hallucinations
 
 # === FEW-SHOT EXAMPLES ===
-FEW_SHOTS = []
+FEW_SHOTS = [
+    {
+        "user": "Which CPT codes drove the most cost in Q2 2024?",
+        "assistant": """{
+            "summary": ["Top CPT codes for Q2 2024 were 99213 and 93000, accounting for 45% of total charge_amounts."],
+            "tables": [{"name": "cost_drivers"}],
+            "figures": [],
+            "citations": ["cpt.csv"],
+            "next_steps": ["Review clinical justification for CPT 99213", "Audit providers with high utilization"]
+        }"""
+    },
+    {
+        "user": "Which providers show unusual billing patterns on CPT 99213?",
+        "assistant": """{
+            "summary": ["3 providers exceeded Z≥3 on CPT 99213, suggesting potential overbilling anomalies."],
+            "tables": [{"name": "provider_outliers"}],
+            "figures": [],
+            "citations": ["nppes.csv"],
+            "next_steps": ["Forward flagged providers to SIU team", "Cross-check claim volumes against regional averages"]
+        }"""
+    }
+]
 
 # === ANNOTATION ===
 # Each few-shot does 3 things:
