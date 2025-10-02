@@ -31,14 +31,22 @@ def run(claims_df):
     if result.get("tables"):
         st.subheader("📊 Tables")
         for tbl in result["tables"]:
-            if isinstance(tbl, list) and all(isinstance(row, dict) for row in tbl):
-                # Proper list of dicts → make DataFrame
-                st.dataframe(pd.DataFrame(tbl))
-            elif isinstance(tbl, dict):
-                # Single dict → wrap in list to make one-row DataFrame
-                st.dataframe(pd.DataFrame([tbl]))
-            else:
-                # Unexpected type → fallback
+            try:
+                if isinstance(tbl, list) and all(isinstance(row, dict) for row in tbl):
+                    df = pd.DataFrame(tbl)
+                    df = df.applymap(lambda x: str(x) if isinstance(x, (dict, list)) else x)
+                    st.dataframe(df, use_container_width=True)
+
+                elif isinstance(tbl, dict):
+                    df = pd.DataFrame([tbl])
+                    df = df.applymap(lambda x: str(x) if isinstance(x, (dict, list)) else x)
+                    st.dataframe(df, use_container_width=True)
+
+                else:
+                    st.json(tbl)  # fallback debug
+
+            except Exception as e:
+                st.error(f"⚠️ Could not render table: {e}")
                 st.json(tbl)
 
     # 4) Render next steps
