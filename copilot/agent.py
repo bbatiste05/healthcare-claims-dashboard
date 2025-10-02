@@ -146,6 +146,20 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 args = json.loads(tc.function.arguments or "{}")
                 tool_result = _call_tool(fn, args, df)
 
+                # 🔧 Patch: Normalize DataFrame → list[dict]
+                if isinstance(tool_result, pd.DataFrame):
+                    tool_result = tool_result.to_dict(orient="records")
+                elif isinstance(tool_result, dict):
+                    # If it's a dict with rows inside, normalize too
+                    if any(isinstance(v, (list, dict)) for v in tool_result.values()):
+                        try:
+                            tool_result = pd.DataFrame(tool_result).to_dict(orient="records")
+                        except Exception:
+                            tool_result = [tool_result]
+                    else:
+                        tool_result = [tool_result]
+
+
                 # 3. Feed tool results back to GPT
                 follow = client.chat.completions.create(
                     model="gpt-4.1-mini",
