@@ -187,10 +187,10 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                     try:
                         parsed = json.loads(final_answer)
                         for k in result_payload.keys():
-                            result_payload[k] = parsed.get(k, result_payload[k])
-                        return result_payload
-                    except Exception:
-                        pass
+                            if isinstance(parsed.get(k), str):
+                                result_payload[k] = [parsed.get(k)]
+                            else:
+                                result_payload[k] = parsed.get(k, result_payload[k])
 
         # Fallback if no tools used
         result_payload["summary"].append("No tools invoked. Try specifying CPT/ICD/time window.")
