@@ -27,20 +27,19 @@ def run(claims_df):
     else:
         st.info("No summary available.")
 
-    # 3) Render tables
+    # 3) Render tables (if any)
     if result.get("tables"):
         st.subheader("📊 Tables")
         for tbl in result["tables"]:
-            # If it's already a list of dicts → build DataFrame
             if isinstance(tbl, list) and all(isinstance(row, dict) for row in tbl):
-                df = pd.DataFrame(tbl)
-                st.dataframe(df, use_container_width=True)
-            # If it's a dict (single row) → wrap in list → DataFrame
+                # Proper list of dicts → make DataFrame
+                st.dataframe(pd.DataFrame(tbl))
             elif isinstance(tbl, dict):
-                df = pd.DataFrame([tbl])
-                st.dataframe(df, use_container_width=True)
+                # Single dict → wrap in list to make one-row DataFrame
+                st.dataframe(pd.DataFrame([tbl]))
             else:
-                st.json(tbl)  # fallback (debugging)
+                # Unexpected type → fallback
+                st.json(tbl)
 
     # 4) Render next steps
     if result.get("next_steps"):
