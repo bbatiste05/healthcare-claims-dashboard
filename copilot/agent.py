@@ -120,22 +120,27 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
 
 
 def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
-    """Experiment 3: Structured enforcement. Always return valid JSON."""
+    """Experiment 4: Tool + RAG + structured JSON."""
 
     key = st.secrets.get("OPENAI_API_KEY")
     client = OpenAI(api_key=key)
 
-    # Messages: System + Few-shots + User
+    # 1. Retrieval augmentation (snippets from ICD/CPT/NPPES)
+    snippets = rag.search(user_q, k=5)
+    snip_text = "\n".join([json.dumps(s, ensure_ascii=False) for s in snippets])
+
+    # 2. Messages: system + few-shot + context + user
     messages = [
         {
             "role": "system",
             "content": (
                 "You are Healthcare Claims Copilot. "
-                "Always respond in valid JSON with the keys: "
-                "summary, tables, figures, citations, next_steps. "
-                "If you cannot answer, return empty lists and explain in summary."
-            ),
-        }
+                "Always return valid JSON with keys: summary, tables, figures, citations, next_steps. "
+                "Use tools when possible to compute real results. "
+                "Ground external references using the provided context snippets."
+            )
+        },
+        {"role": "system", "content": f"External context (ICD/CPT/NPPES snippets):\n{snip_text}"}
     ]
 
     for ex in FEW_SHOTS:
@@ -145,33 +150,51 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
     messages.append({"role": "user", "content": user_q})
 
     try:
+        # 3. Call GPT with tool schemas
         resp = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=messages,
+            tools=_tools_schema(),   # <-- from your agent.py
+            tool_choice="auto",
             temperature=0.2
         )
 
-        answer = resp.choices[0].message.content or "{}"
+        result_payload = {"summary": [], "tables": [], "figures": [], "citations": [], "next_steps": []}
 
-        # Enforce JSON parsing
-        try:
-            parsed = json.loads(answer)
-        except Exception:
-            parsed = {
-                "summary": ["⚠️ Model did not return valid JSON."],
-                "tables": [],
-                "figures": [],
-                "citations": [],
-                "next_steps": []
-            }
+        # 4. Check if a tool was invoked
+        for choice in resp.choices:
+            msg = choice.message
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    fn = tc.function.name
+                    args = json.loads(tc.function.arguments or "{}")
+                    tool_result = _call_tool(fn, args, df)  # <-- runs Python function
 
-        return {
-            "summary": parsed.get("summary", []),
-            "tables": parsed.get("tables", []),
-            "figures": parsed.get("figures", []),
-            "citations": parsed.get("citations", []),
-            "next_steps": parsed.get("next_steps", [])
-        }
+                    # 5. Feed tool result back into GPT for final formatting
+                    follow = client.chat.completions.create(
+                        model="gpt-4.1-mini",
+                        messages=[
+                            *messages,
+                            {"role": "assistant", "content": None, "tool_calls": msg.tool_calls},
+                            {"role": "tool", "content": json.dumps(tool_result, default=str), "tool_call_id": tc.id},
+                            {"role": "user", "content": "Format the final answer as JSON with keys: summary, tables, figures, citations, next_steps."}
+                        ],
+                        temperature=0.2
+                    )
+
+                    # Parse final JSON
+                    final_answer = follow.choices[0].message.content
+                    try:
+                        parsed = json.loads(final_answer)
+                        for k in result_payload.keys():
+                            result_payload[k] = parsed.get(k, result_payload[k])
+                        return result_payload
+                    except Exception:
+                        pass
+
+        # Fallback if no tools used
+        result_payload["summary"].append("No tools invoked. Try specifying CPT/ICD/time window.")
+        return result_payload
 
     except openai.RateLimitError:
         return {
