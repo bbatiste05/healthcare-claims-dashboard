@@ -52,4 +52,3 @@ def run(claims_df):
     if result.get("citations"):
         st.subheader("📚 Citations")
         st.write(", ".join(result["citations"]))
-ns"[])))
