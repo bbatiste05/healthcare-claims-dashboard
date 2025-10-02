@@ -37,10 +37,11 @@ def run(claims_df):
     if result.get("tables"):
         st.subheader("📊 Tables")
         for tbl in result["tables"]:
-            if isinstance(tbl, dict) and "name" in tbl:
-                st.write(f"**{tbl['name'].capitalize()}**")
-            elif isinstance(tbl, list):  # prefer elif to avoid double render
+            if isinstance(tbl, list):  # list of row dicts
                 st.dataframe(pd.DataFrame(tbl))
+            elif isinstance(tbl, dict) and "name" in tbl:
+                st.markdown(f"**{tbl['name'].capitalize()}**")
+
 
     # 4) Render next steps
     if result.get("next_steps"):
