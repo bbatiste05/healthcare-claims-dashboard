@@ -16,8 +16,7 @@ def top_icd_cpt_cost(df, icd=None, cpt=None, period=None, plan=None, top_n=10):
     if cpt:
         data = data[data["cpt"] == cpt]
     if period:
-        # Example: period="2024Q2" or "2024-01:2024-06"
-        # You’ll need to parse this depending on your date column format
+        # TODO: parse periods (e.g., "2024Q2")
         pass
 
     grouped = (
@@ -29,10 +28,17 @@ def top_icd_cpt_cost(df, icd=None, cpt=None, period=None, plan=None, top_n=10):
     )
 
     total = grouped["charge_amount"].sum()
-    grouped["cost_share"] = (grouped["charge_amount"] / total) * 100
-    grouped["cost_share"] = grouped["cost_share"].round(2).astype(str) + "%"
+    grouped["Cost Share (%)"] = (grouped["charge_amount"] / total) * 100
+    grouped["Cost Share (%)"] = grouped["Cost Share (%)"].round(2).astype(str) + "%"
+
+    # Rename columns for display
+    grouped = grouped.rename(columns={
+        "icd10": "ICD-10 Code",
+        "charge_amount": "Total Cost"
+    })
 
     return grouped.reset_index(drop=True).to_dict(orient="records")
+
 
 def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=3.0):
     _require_cols(df, ["charge_amount", "provider_id"])
