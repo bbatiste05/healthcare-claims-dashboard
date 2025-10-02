@@ -6,9 +6,11 @@ from copilot.agent import ask_gpt
 from copilot.rag import SimpleRAG
 from copilot import tools as copilot_tools
 
+
 def _render_table(df: pd.DataFrame, caption: str):
     st.caption(caption)
     st.dataframe(df, use_container_width=True)
+
 
 def run(claims_df):
     st.header("🚀 Healthcare Claims Copilot")
@@ -24,7 +26,6 @@ def run(claims_df):
 
     # 2) Render the summary
     st.subheader("Answer")
-
     summaries = result.get("summary", [])
     if summaries:
         for s in summaries:
@@ -32,17 +33,14 @@ def run(claims_df):
     else:
         st.info("No summary available.")
 
-
-
     # 3) Render tables (if any)
     if result.get("tables"):
-        st.subheader(" Tables")
+        st.subheader("📊 Tables")
         for tbl in result["tables"]:
             if isinstance(tbl, dict) and "name" in tbl:
                 st.write(f"**{tbl['name'].capitalize()}**")
-            if isinstance(tbl, list):
+            elif isinstance(tbl, list):  # prefer elif to avoid double render
                 st.dataframe(pd.DataFrame(tbl))
-       
 
     # 4) Render next steps
     if result.get("next_steps"):
