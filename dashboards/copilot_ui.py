@@ -25,15 +25,10 @@ def run(claims_df):
     result = ask_gpt(user_q, claims_df, rag)
 
     # 2) Render the summary
-    summaries = result.get("summary", [])
-if isinstance(summaries, str):  # if GPT returned a string
-    summaries = [summaries]
+    st.subheader("Answer")
+    st.write(" ".join(result.get("summary", [])))
 
-if summaries:
-    for s in summaries:
-        st.markdown(s)
-else:
-    st.info("No summary available.")
+
 
 
     # 3) Render tables (if any)
@@ -50,12 +45,10 @@ else:
                 st.json(tbl)  # fallback debug
 
     # 4) Render next steps
-    if result.get("next_steps"):
         st.subheader("Next Steps")
-        for step in result["next_steps"]:
+        for step in result.get("next_steps", []):
             st.write("•", step)
 
     # 5) Render citations
-    if result.get("citations"):
         st.subheader("Citations")
-        st.write(", ".join(result["citations"]))
+        st.write(", ".join(result.get("citations"[])))
