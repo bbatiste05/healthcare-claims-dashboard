@@ -1,4 +1,3 @@
-
 # copilot/agent.py
 import json
 import pandas as pd
@@ -11,6 +10,10 @@ from .prompts import SYSTEM_PROMPT, FEW_SHOTS
 from .tools import top_icd_cpt_cost, provider_anomalies, fraud_flags, risk_scoring
 from .rag import SimpleRAG
 
+
+# ------------------------------
+# 1. Define available tool schema
+# ------------------------------
 def _tools_schema() -> List[Dict[str, Any]]:
     return [
         {
@@ -23,7 +26,7 @@ def _tools_schema() -> List[Dict[str, Any]]:
                     "properties": {
                         "icd": {"type": "string", "nullable": True},
                         "cpt": {"type": "string", "nullable": True},
-                        "period": {"type": "string", "description": "e.g., '2024Q2' or '2024-01:2024-06'", "nullable": True},
+                        "period": {"type": "string", "nullable": True},
                         "plan": {"type": "string", "nullable": True},
                         "top_n": {"type": "integer", "default": 10}
                     }
@@ -75,26 +78,31 @@ def _tools_schema() -> List[Dict[str, Any]]:
     ]
 
 
+# ------------------------------
+# 2. Build messages
+# ------------------------------
 def _messages(user_q: str, rag: SimpleRAG) -> list:
     snippets = rag.search(user_q, k=5)
     snip_text = "\n".join([json.dumps(s, ensure_ascii=False) for s in snippets])
 
-    msgs = [
-        {"role": "system", "content": SYSTEM_PROMPT}
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": f"External context (ICD/CPT/NPPES snippets):\n{snip_text}"}
     ]
 
+    # few-shot examples
     for ex in FEW_SHOTS:
-        msgs.append({"role": "user", "content": ex["user"]})
-        msgs.append({"role": "assistant", "content": "Use tools as needed. Return structured JSON."})
+        messages.append({"role": "user", "content": ex["user"]})
+        messages.append({"role": "assistant", "content": ex["assistant"]})
 
-    msgs.append({"role": "system", "content": f"External context (ICD/CPT/NPPES snippets):\n{snip_text}"})
-    msgs.append({"role": "user", "content": user_q})
-
-    return msgs
-
+    # user question
+    messages.append({"role": "user", "content": user_q})
+    return messages
 
 
-
+# ------------------------------
+# 3. Call local Python tools
+# ------------------------------
 def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
     if name == "top_icd_cpt_cost":
         return top_icd_cpt_cost(df, **args)
@@ -107,81 +115,64 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
     return {"error": f"Unknown tool: {name}"}
 
 
+# ------------------------------
+# 4. Main entrypoint
+# ------------------------------
 def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
-    """Experiment 4: Tool + RAG + structured JSON."""
-
     key = st.secrets.get("OPENAI_API_KEY")
     client = OpenAI(api_key=key)
 
-    # 1. Retrieval augmentation (snippets from ICD/CPT/NPPES)
-    snippets = rag.search(user_q, k=5)
-    snip_text = "\n".join([json.dumps(s, ensure_ascii=False) for s in snippets])
+    messages = _messages(user_q, rag)
+    tools = _tools_schema()
 
-    # 2. Messages: system + few-shot + context + user
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are Healthcare Claims Copilot. "
-                "Always return valid JSON with keys: summary, tables, figures, citations, next_steps. "
-                "Use tools when possible to compute real results. "
-                "Ground external references using the provided context snippets."
-            )
-        },
-        {"role": "system", "content": f"External context (ICD/CPT/NPPES snippets):\n{snip_text}"}
-    ]
-
-    for ex in FEW_SHOTS:
-        messages.append({"role": "user", "content": ex["user"]})
-        messages.append({"role": "assistant", "content": ex["assistant"]})
-
-    messages.append({"role": "user", "content": user_q})
+    result_payload = {"summary": [], "tables": [], "figures": [], "citations": [], "next_steps": []}
 
     try:
-        # 3. Call GPT with tool schemas
+        # 1. Ask GPT (tool choice auto-enabled)
         resp = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=messages,
-            tools=_tools_schema(),   # <-- from your agent.py
+            tools=tools,
             tool_choice="auto",
             temperature=0.2
         )
 
-        result_payload = {"summary": [], "tables": [], "figures": [], "citations": [], "next_steps": []}
+        msg = resp.choices[0].message
 
-        # 4. Check if a tool was invoked
-        for choice in resp.choices:
-            msg = choice.message
-            if msg.tool_calls:
-                for tc in msg.tool_calls:
-                    fn = tc.function.name
-                    args = json.loads(tc.function.arguments or "{}")
-                    tool_result = _call_tool(fn, args, df)  # <-- runs Python function
+        # 2. If GPT requested a tool → run locally
+        if msg.tool_calls:
+            for tc in msg.tool_calls:
+                fn = tc.function.name
+                args = json.loads(tc.function.arguments or "{}")
+                tool_result = _call_tool(fn, args, df)
 
-                    # 5. Feed tool result back into GPT for final formatting
-                    follow = client.chat.completions.create(
-                        model="gpt-4.1-mini",
-                        messages=[
-                            *messages,
-                            {"role": "assistant", "content": None, "tool_calls": msg.tool_calls},
-                            {"role": "tool", "content": json.dumps(tool_result, default=str), "tool_call_id": tc.id},
-                            {"role": "user", "content": "Format the final answer as JSON with keys: summary, tables, figures, citations, next_steps."}
-                        ],
-                        temperature=0.2
-                    )
+                # 3. Feed tool results back to GPT
+                follow = client.chat.completions.create(
+                    model="gpt-4.1-mini",
+                    messages=[
+                        *messages,
+                        {"role": "assistant", "content": None, "tool_calls": msg.tool_calls},
+                        {"role": "tool", "content": json.dumps(tool_result, default=str), "tool_call_id": tc.id},
+                        {"role": "user", "content": "Format the final answer as JSON with keys: summary, tables, figures, citations, next_steps."}
+                    ],
+                    temperature=0.2
+                )
 
-                    # Parse final JSON
-                    final_answer = follow.choices[0].message.content
-                    try:
-                        parsed = json.loads(final_answer)
-                        for k in result_payload.keys():
+                final_answer = follow.choices[0].message.content
+                try:
+                    parsed = json.loads(final_answer)
+                    for k in result_payload.keys():
+                        if isinstance(parsed.get(k), str):
+                            result_payload[k] = [parsed.get(k)]
+                        else:
                             result_payload[k] = parsed.get(k, result_payload[k])
-                        return result_payload
-                    except Exception:
-                        pass
+                    return result_payload
+                except Exception:
+                    result_payload["summary"].append(final_answer)
+                    return result_payload
 
-        # Fallback if no tools used
-        result_payload["summary"].append("No tools invoked. Try specifying CPT/ICD/time window.")
+        # 4. Fallback if no tools invoked
+        result_payload["summary"].append(msg.content or "No tools invoked.")
         return result_payload
 
     except openai.RateLimitError:
@@ -192,3 +183,4 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             "citations": [],
             "next_steps": []
         }
+
