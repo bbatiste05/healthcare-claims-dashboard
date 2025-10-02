@@ -120,34 +120,44 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
 
 
 def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
-    """Baseline: simple system+user prompt, no few-shots, no structured JSON enforcement."""
+    """Experiment 2: Few-shot prompting to enforce JSON-style outputs."""
 
     key = st.secrets.get("OPENAI_API_KEY")
-    if not key:
-        st.error("❌ No API key found in secrets")
-        st.stop()
-
     client = OpenAI(api_key=key)
+
+    # Build messages with few-shots
+    messages = [
+        {"role": "system", "content": "You are Healthcare Claims Copilot. Answer questions using structured JSON output with keys: summary, tables, figures, citations, next_steps."}
+    ]
+
+    for ex in FEW_SHOTS:
+        messages.append({"role": "user", "content": ex["user"]})
+        messages.append({"role": "assistant", "content": ex["assistant"]})
+
+    messages.append({"role": "user", "content": user_q})
 
     try:
         resp = client.chat.completions.create(
             model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": "You are Healthcare Claims Copilot. Answer user queries clearly and concisely."},
-                {"role": "user", "content": user_q}
-            ],
+            messages=messages,
             temperature=0.2
         )
 
-        # Extract answer text
-        answer = resp.choices[0].message.content or "⚠️ No response received."
+        answer = resp.choices[0].message.content or "{}"
 
+        # Try parsing JSON-like content
+        try:
+            parsed = json.loads(answer)
+        except Exception:
+            parsed = {"summary": [answer]}
+
+        # Return structured payload
         return {
-            "summary": [answer],
-            "tables": [],
-            "figures": [],
-            "citations": [],
-            "next_steps": []
+            "summary": parsed.get("summary", []),
+            "tables": parsed.get("tables", []),
+            "figures": parsed.get("figures", []),
+            "citations": parsed.get("citations", []),
+            "next_steps": parsed.get("next_steps", [])
         }
 
     except openai.RateLimitError:
