@@ -27,27 +27,32 @@ def run(claims_df):
     else:
         st.info("No summary available.")
 
-    # 3) Render tables (if any)
+       # 3) Render tables (if any)
     if result.get("tables"):
         st.subheader("📊 Tables")
-        for tbl in result["tables"]:
-            try:
+
+        tables = result["tables"]
+
+        # If it's a list of dicts (rows) → single DataFrame
+        if isinstance(tables, list) and all(isinstance(row, dict) for row in tables):
+            df = pd.DataFrame(tables)
+            df = df.applymap(lambda x: str(x) if isinstance(x, (dict, list)) else x)
+            st.dataframe(df, use_container_width=True)
+
+        # If it's already multiple tables, render each
+        elif isinstance(tables, list):
+            for tbl in tables:
                 if isinstance(tbl, list) and all(isinstance(row, dict) for row in tbl):
                     df = pd.DataFrame(tbl)
                     df = df.applymap(lambda x: str(x) if isinstance(x, (dict, list)) else x)
                     st.dataframe(df, use_container_width=True)
-
                 elif isinstance(tbl, dict):
                     df = pd.DataFrame([tbl])
                     df = df.applymap(lambda x: str(x) if isinstance(x, (dict, list)) else x)
                     st.dataframe(df, use_container_width=True)
-
                 else:
-                    st.json(tbl)  # fallback debug
+                    st.json(tbl)  # fallback
 
-            except Exception as e:
-                st.error(f"⚠️ Could not render table: {e}")
-                st.json(tbl)
 
     # 4) Render next steps
     if result.get("next_steps"):
