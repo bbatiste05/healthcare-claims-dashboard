@@ -10,14 +10,10 @@ def _require_cols(df: pd.DataFrame, cols):
 def top_icd_cpt_cost(df, icd=None, cpt=None, period=None, plan=None, top_n=10):
     data = df.copy()
 
-    # Optional filters
     if icd:
         data = data[data["icd10"] == icd]
     if cpt:
         data = data[data["cpt"] == cpt]
-    if period:
-        # TODO: parse periods (e.g., "2024Q2")
-        pass
 
     grouped = (
         data.groupby("icd10")["charge_amount"]
@@ -28,16 +24,16 @@ def top_icd_cpt_cost(df, icd=None, cpt=None, period=None, plan=None, top_n=10):
     )
 
     total = grouped["charge_amount"].sum()
-    grouped["Cost Share (%)"] = (grouped["charge_amount"] / total) * 100
-    grouped["Cost Share (%)"] = grouped["Cost Share (%)"].round(2).astype(str) + "%"
+    grouped["Cost Share (%)"] = (grouped["charge_amount"] / total * 100).round(2)
 
-    # Rename columns for display
     grouped = grouped.rename(columns={
         "icd10": "ICD-10 Code",
         "charge_amount": "Total Cost"
     })
 
-    return grouped.reset_index(drop=True).to_dict(orient="records")
+    # 🔑 Return list of dicts
+    return grouped.to_dict(orient="records")
+
 
 
 def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=3.0):
