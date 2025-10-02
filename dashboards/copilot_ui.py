@@ -34,13 +34,18 @@ def run(claims_df):
         st.info("No summary available.")
 
     # 3) Render tables (if any)
-    if result.get("tables"):
-        st.subheader("📊 Tables")
-        for tbl in result["tables"]:
-            if isinstance(tbl, list):  # list of row dicts
-                st.dataframe(pd.DataFrame(tbl))
-            elif isinstance(tbl, dict) and "name" in tbl:
-                st.markdown(f"**{tbl['name'].capitalize()}**")
+   if result.get("tables"):
+    st.subheader("📊 Tables")
+    for tbl in result["tables"]:
+        # If it's a list of dicts, treat as rows
+        if isinstance(tbl, list) and all(isinstance(row, dict) for row in tbl):
+            st.dataframe(pd.DataFrame(tbl))
+        # If it's a dict with metadata
+        elif isinstance(tbl, dict) and "name" in tbl:
+            st.write(f"**{tbl['name'].capitalize()}** (no row data returned)")
+        else:
+            st.json(tbl)  # fallback debug
+
 
 
     # 4) Render next steps
