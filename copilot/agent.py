@@ -120,15 +120,12 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
 
 
 def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
-    """Temporary simplified version using Chat Completions for debugging."""
+    """Baseline: simple system+user prompt, no few-shots, no structured JSON enforcement."""
 
     key = st.secrets.get("OPENAI_API_KEY")
     if not key:
         st.error("❌ No API key found in secrets")
         st.stop()
-    else:
-        st.write("✅ Key loaded, length:", len(key))
-        st.write("Key prefix:", key[:10])
 
     client = OpenAI(api_key=key)
 
@@ -136,13 +133,13 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
         resp = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[
-                {"role": "system", "content": "You are Healthcare Claims Copilot."},
+                {"role": "system", "content": "You are Healthcare Claims Copilot. Answer user queries clearly and concisely."},
                 {"role": "user", "content": user_q}
             ],
             temperature=0.2
         )
 
-        # Extract the assistant's text
+        # Extract answer text
         answer = resp.choices[0].message.content or "⚠️ No response received."
 
         return {
