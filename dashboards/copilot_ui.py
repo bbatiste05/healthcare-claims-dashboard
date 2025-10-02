@@ -34,7 +34,7 @@ def run(claims_df):
         st.info("No summary available.")
 
     # 3) Render tables (if any)
-   if result.get("tables"):
+    if result.get("tables"):
         st.subheader("📊 Tables")
         for tbl in result["tables"]:
             # If it's a list of dicts, treat as rows
@@ -45,8 +45,6 @@ def run(claims_df):
                 st.write(f"**{tbl['name'].capitalize()}** (no row data returned)")
             else:
                 st.json(tbl)  # fallback debug
-
-
 
     # 4) Render next steps
     if result.get("next_steps"):
