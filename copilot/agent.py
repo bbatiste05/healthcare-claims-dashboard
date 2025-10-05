@@ -104,6 +104,13 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
 # 3. Call local Python tools
 # ------------------------------
 def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
+
+    # 🛡️ Guardrail: default ICD/CPT context
+    if "icd" in user_q.lower() and "icd" not in args:
+        args["icd"] = "ALL"
+    elif "cpt" in user_q.lower() and "cpt" not in args:
+        args["cpt"] = "ALL"
+        
     if name == "top_icd_cpt_cost":
         return top_icd_cpt_cost(df, **args)
     if name == "provider_anomalies":
