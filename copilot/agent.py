@@ -103,7 +103,7 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
 # ------------------------------
 # 3. Call local Python tools
 # ------------------------------
-def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):
+def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = ""):
 
     # 🛡️ Guardrail: default ICD/CPT context
     if "icd" in user_q.lower() and "icd" not in args:
