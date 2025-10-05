@@ -8,3 +8,20 @@ Flag providers with excessive claims per patient in the last 90 days.,Fraud flag
 Show a chart of monthly spend for CPT 97110 and annotate anomaly months.,Trend figure + notes
 Which patients newly crossed high-risk threshold? Provide de-identified indicators.,De-identified list + reasons
 Explain ICD I10 and CPT 99213 in plain language with sources.,Code descriptions + sources
+
+id,query,expected_focus
+1,Which CPT codes drove the most cost in Q2 2024?,CPT cost drivers
+2,Which ICD-10 codes account for the highest total charge amounts?,ICD cost drivers
+3,Show the top 5 cost drivers across all claims,Top cost summary
+4,Which providers have unusually high billing patterns?,Provider anomalies
+5,Identify providers with Z-scores greater than 3 for average charge amounts,Provider outlier detection
+6,Flag any providers with more than 10 claims per patient in the past 90 days,Fraud detection
+7,Which providers have potential fraud indicators based on excessive claim frequency?,Fraud detection
+8,Calculate average patient risk scores for all cardiology patients,Risk scoring
+9,Show the top 10 highest risk patients by ICD code,Risk scoring
+10,What percentage of total costs in Q1 2024 came from diabetes-related diagnoses?,Cost by diagnosis (ICD)
+11,Compare provider billing anomalies between Q1 and Q2 2024,Provider anomaly comparison
+12,Which CPT codes are associated with the highest wait_days values?,Operational bottlenecks
+13,Which providers have the largest variance in charge_amount?,Statistical anomaly detection
+14,Generate a summary of overall claims cost trends by quarter,Cost trend analysis
+15,If CPT data is missing, provide ICD-based cost insights instead,Robustness/fallback
