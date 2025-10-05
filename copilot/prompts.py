@@ -1,32 +1,3 @@
-# copilot/prompts.py
-
-"""
-System prompt and few-shot examples for the Healthcare Claims Copilot.
-This file defines the "rules of the road" for how GPT should behave.
-"""
-
-# === SYSTEM PROMPT ===
-SYSTEM_PROMPT = """
-You are Healthcare Claims Copilot — a domain-specific assistant for healthcare claims analysts.
-Your job is to:
-- Answer user questions about healthcare claims cost drivers, anomalies, fraud, and patient risk.
-- Always use the available tool functions (top_icd_cpt_cost, provider_anomalies, fraud_flags, risk_scoring).
-- When referencing external knowledge (ICD, CPT, NPPES), ground your answers using retrieval snippets.
-- Return results in structured JSON with keys: summary, tables, figures, citations, next_steps.
-- Be safe: do not reveal PHI directly; aggregate patient-level results if fewer than 10 patients are in a group.
-- If the question cannot be answered, respond with a helpful clarification request instead of guessing.
-- Always include at least one table with structured rows in the 'tables' key.
-- Tables must be a list of objects (rows), not a single dict or free text.
-"""
-
-# === ANNOTATION ===
-# - "domain-specific assistant" → tells GPT to stay focused on claims, not general chat
-# - "Always use tools" → pushes it to call your Python functions instead of free-text answers
-# - "Return structured JSON" → enforces machine-readable output your UI expects
-# - "Ground answers using retrieval snippets" → ties in external ICD/CPT/NPPES context
-# - "Be safe: aggregate PHI" → covers HIPAA-sensitive use case
-# - "Clarification if cannot answer" → ensures safe fallback instead of hallucinations
-
 # === FEW-SHOT EXAMPLES ===
 FEW_SHOTS = [
     {
@@ -41,15 +12,25 @@ FEW_SHOTS = [
             "citations": ["cpt.csv"],
             "next_steps": ["Review justification for CPT 99213", "Audit providers with high utilization"]
         }"""
+    },
+    {
+        "user": "Which ICD codes account for the highest total charge amounts?",
+        "assistant": """{
+            "summary": ["The top ICD-10 codes driving cost are L5789, 41401, and 0389, representing 45% of total charges."],
+            "tables": [[
+                {"ICD-10 Code": "L5789", "Total Cost": 18449000, "Cost Share (%)": 17.18},
+                {"ICD-10 Code": "41401", "Total Cost": 16713880, "Cost Share (%)": 15.57},
+                {"ICD-10 Code": "0389", "Total Cost": 14227040, "Cost Share (%)": 13.25}
+            ]],
+            "figures": [],
+            "citations": ["icd.csv"],
+            "next_steps": ["Investigate cost drivers for top ICD-10 codes to identify trends."]
+        }"""
     }
 ]
-
 
 # === ANNOTATION ===
 # Each few-shot does 3 things:
 # 1. Shows GPT the JSON schema you expect (summary, tables, figures, citations, next_steps).
-# 2. Demonstrates tool use: first example → cost_drivers, second → provider_outliers.
-# 3. Provides realistic next steps an analyst would take, which improves actionability.
-
-
-# 3. Provides realistic next steps an analyst would take, which improves actionability.
+# 2. Demonstrates tool use: first example → CPT cost drivers, second → ICD cost drivers.
+# 3. Provides realistic next steps an analyst would take, improving actionability.
