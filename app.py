@@ -1,3 +1,5 @@
+import sys, os
+sys.path.append(os.path.dirname(__file__))
 import streamlit as st
 st.write("Secrets loaded:", "OPENAI_API_KEY" in st.secrets)
 from load_data import get_dataset
