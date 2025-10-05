@@ -6,7 +6,7 @@ import openai
 from typing import Dict, Any, List
 from openai import OpenAI
 
-from .prompts import SYSTEM_PROMPT, FEW_SHOTS
+from copilot.prompts import SYSTEM_PROMPT, FEW_SHOTS
 from copilot.tools import top_icd_cpt_cost, provider_anomalies, fraud_flags, risk_scoring
 from copilot.rag import SimpleRAG
 
