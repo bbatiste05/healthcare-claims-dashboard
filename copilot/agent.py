@@ -151,7 +151,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             for tc in msg.tool_calls:
                 fn = tc.function.name
                 args = json.loads(tc.function.arguments or "{}")
-                tool_result = _call_tool(fn, args, df)
+                tool_result = _call_tool(fn, args, df, user_q=user_q)
 
                 # 🔧 Patch: Normalize DataFrame → list[dict]
                 if isinstance(tool_result, pd.DataFrame):
