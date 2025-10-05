@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 
-from .agent import ask_gpt
+from copilot.agent import ask_gpt
 from copilot.rag import SimpleRAG
 from copilot import tools as copilot_tools
 
