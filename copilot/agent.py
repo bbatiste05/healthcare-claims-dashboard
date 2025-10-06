@@ -259,6 +259,28 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 except Exception:
                     result_payload["summary"].append(final_answer)
 
+            # ✅ Normalize nested lists inside tables
+            if "tables" in result_payload:
+                clean_tables = []
+                for t in result_payload["tables"]:
+                    # Case 1: If table is a stringified list of dicts
+                    if isinstance(t, str) and t.strip().startswith("["):
+                        try:
+                            parsed = json.loads(t.replace("'", '"'))
+                            if isinstance(parsed, list):
+                                clean_tables.extend(parsed)
+                            else:
+                                clean_tables.append(parsed)
+                        except Exception:
+                            clean_tables.append({"Raw": t})
+
+                    # Case 2: Already a list of dicts
+                    elif isinstance(t, list):
+                        clean_tables.extend(t)
+                    elif isinstance(t, dict):
+                        clean_tables.append(t)
+
+                result_payload["tables"] = clean_tables
                 return result_payload
 
         # 3. Fallback if no tools invoked
