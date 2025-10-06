@@ -29,33 +29,34 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
     
     _require_cols(df, ["charge_amount", "service_date"])
 
-    # Filter by ICD or CPT if provided
+   # ✅ Main logic
     if icd:
-        d = d[d["icd10"].astype(str).str.startswith(icd)]
-    if cpt:
-        d = d[d["cp"].astype(str) == str(cpt)]
-
-    # Time filter
-    if period:
-        d["dt"] = pd.to_datetime(d["service_date"])
-        if "Q" in str(period):  # e.g., 2024Q2
-            year = int(period[:4]); q = int(period[-1])
-            d = d[(d["dt"].dt.year == year) & (d["dt"].dt.quarter == q)]
-        elif ":" in str(period):  # e.g., 2024-01:2024-06
-            start, end = str(period).split(":")
-            d = d[(d["dt"] >= start) & (d["dt"] <= end)]
-
-    # Group by CPT (cp) if available
-    if "cp" in d.columns:
-        g = d.groupby("cp")["charge_amount"].sum().sort_values(ascending=False).head(top_n)
-        table = g.reset_index().rename(columns={"charge_amount": "total_charge"})
-        table["share"] = table["total_charge"] / table["total_charge"].sum()
-        return {"table_name": "cost_drivers", "table": table}
+        group_field = "icd10"
+    elif cpt:
+        group_field = "cpt"
     else:
-        g = d.groupby("icd10")["charge_amount"].sum().sort_values(ascending=False).head(top_n)
-        table = g.reset_index().rename(columns={"charge_amount": "total_charge"})
-        table["share"] = table["total_charge"] / table["total_charge"].sum()
-        return {"table_name": "cost_drivers", "table": table}
+        # fallback: auto-detect ICD vs CPT columns
+        if "icd10" in df.columns:
+            group_field = "icd10"
+        elif "cpt" in df.columns:
+            group_field = "cpt"
+        else:
+            raise ValueError("No ICD or CPT code columns found.")
+
+    summary = (
+        df.groupby(group_field)["charge_amount"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(top_n)
+        .reset_index()
+    )
+
+    summary.columns = [group_field.upper(), "Total Cost"]
+    summary["Cost Share (%)"] = (
+        (summary["Total Cost"] / summary["Total Cost"].sum()) * 100
+    ).round(2)
+
+    return {"table_name": "cost_drivers", "table": summary}
 
 
 
