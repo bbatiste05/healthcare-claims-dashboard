@@ -148,58 +148,72 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             for tc in msg.tool_calls:
                 fn = tc.function.name
                 args = json.loads(tc.function.arguments or "{}")
+
+                # ✅ Run the tool locally
                 tool_result = _call_tool(fn, args, df, user_q=user_q)
 
-                # 🔧 Patch: Normalize DataFrame → list[dict]
-                if isinstance(tool_result, pd.DataFrame):
-                    tool_result = tool_result.to_dict(orient="records")
-                elif isinstance(tool_result, dict):
-                    # If it's a dict with rows inside, normalize too
-                    if any(isinstance(v, (list, dict)) for v in tool_result.values()):
-                        try:
-                            tool_result = pd.DataFrame(tool_result).to_dict(orient="records")
-                        except Exception:
-                            tool_result = [tool_result]
-                    else:
-                        tool_result = [tool_result]
+                # ✅ Normalize tool_result into valid JSON for GPT
+                if isinstance(tool_result, dict):
+                    if "summary" not in tool_result:
+                        tool_result["summary"] = "Tool executed successfully."
 
+                    if "table" in tool_result and isinstance(tool_result["table"], pd.DataFrame):
+                        tool_result["table"] = tool_result["table"].to_dict(orient="records")
 
-                # 3. Feed tool results back to GPT
+                elif isinstance(tool_result, pd.DataFrame):
+                    tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
+                else:
+                    tool_result = {"summary": str(tool_result), "table": []}
+
+                # ✅ Feed normalized tool result back to GPT for final formatting
                 follow = client.chat.completions.create(
                     model="gpt-4.1-mini",
                     messages=[
                         *messages,
                         {"role": "assistant", "content": None, "tool_calls": msg.tool_calls},
-                        {"role": "tool", "content": json.dumps(tool_result, default=str), "tool_call_id": tc.id},
-                        {"role": "user", "content": "Format the final answer as JSON with keys: summary, tables, figures, citations, next_steps."}
+                        {
+                            "role": "tool",
+                            "content": json.dumps(tool_result, default=str, indent=2),
+                            "tool_call_id": tc.id,
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                "Format the final answer as valid JSON with keys: "
+                                "summary, tables, figures, citations, next_steps. "
+                                "If a tool result contains both summary and table data, include both."
+                            ),
+                        },
                     ],
-                    temperature=0.2
+                    temperature=0.2,
                 )
 
+                # ✅ Parse GPT’s formatted JSON output
                 final_answer = follow.choices[0].message.content
-                parsed = json.loads(final_answer)
+                try:
+                    parsed = json.loads(final_answer)
+                    for k in result_payload.keys():
+                        if isinstance(parsed.get(k), str):
+                            result_payload[k] = [parsed.get(k)]
+                        else:
+                            result_payload[k] = parsed.get(k, result_payload[k])
 
-                # Normalize each key
-                for k in result_payload.keys():
-                    if isinstance(parsed.get(k), str):
-                        result_payload[k] = [parsed.get(k)]
-                    else:
-                        result_payload[k] = parsed.get(k, result_payload[k])
+                    # Normalize table structure
+                    if "tables" in result_payload:
+                        fixed_tables = []
+                        for t in result_payload["tables"]:
+                            if isinstance(t, dict):
+                                fixed_tables.append(t)
+                            elif isinstance(t, list):
+                                fixed_tables.extend(t)
+                        result_payload["tables"] = fixed_tables
 
-                # 🔧 Extra patch: normalize tables so they’re always list[dict]
-                if "tables" in result_payload:
-                    fixed_tables = []
-                    for t in result_payload["tables"]:
-                        if isinstance(t, dict):
-                            fixed_tables.append(t)
-                        elif isinstance(t, list):
-                            fixed_tables.extend(t)
-                    result_payload["tables"] = fixed_tables
+                except Exception:
+                    result_payload["summary"].append(final_answer)
 
                 return result_payload
 
-
-        # 4. Fallback if no tools invoked
+        # 3. Fallback if no tools invoked
         result_payload["summary"].append(msg.content or "No tools invoked.")
         return result_payload
 
@@ -211,20 +225,3 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             "citations": [],
             "next_steps": []
         }
-
-
-
-
-        # 4. Fallback if no tools invoked
-        result_payload["summary"].append(msg.content or "No tools invoked.")
-        return result_payload
-
-    except openai.RateLimitError:
-        return {
-            "summary": ["⚠️ Rate limit reached. Please wait a few seconds and try again."],
-            "tables": [],
-            "figures": [],
-            "citations": [],
-            "next_steps": []
-        }
-
