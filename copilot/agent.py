@@ -165,29 +165,33 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 else:
                     tool_result = {"summary": str(tool_result), "table": []}
 
-                # ✅ Feed normalized tool result back to GPT for final formatting
+                # ✅ Safe version for /chat/completions endpoint
                 try:
                     safe_tool_content = json.dumps(tool_result, default=str, indent=2)
                 except Exception as e:
                     safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
-                    
+
                 follow = client.chat.completions.create(
                     model="gpt-4.1-mini",
                     messages=[
                         *messages,
-                        {"role": "assistant", "content": None, "tool_calls": msg.tool_calls},
+                        {
+                            "role": "assistant",
+                            "content": "Invoking tool function based on request.",
+                            "tool_calls": msg.tool_calls
+                        },
                         {
                             "role": "tool",
-                            "content": json.dumps(tool_result, default=str, indent=2),
-                            "tool_call_id": tc.id,
+                            "content": safe_tool_content,
+                            "tool_call_id": msg.tool_calls[0].id if msg.tool_calls else "tool_1"
                         },
                         {
                             "role": "user",
                             "content": (
-                                "Return a concise JSON with keys: summary, tabls, figures, citations, next_steps. "
-                                "Avoid repeating long tables or nested JSON. If data is tool long, summarize it instead."
-                            ),
-                        },
+                                "Format the final answer as valid JSON with keys: summary, tables, figures, citations, next_steps. "
+                                "Ensure it is valid JSON and concise (avoid long data dumps)."
+                            )
+                        }
                     ],
                     temperature=0.2,
                 )
