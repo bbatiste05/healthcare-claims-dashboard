@@ -7,7 +7,7 @@ def _require_cols(df: pd.DataFrame, cols):
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10):
+def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10, **kwargs):
     _require_cols(df, ["charge_amount", "service_date"])
     d = df.copy()
 
@@ -43,7 +43,7 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
 
 
 
-def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5):
+def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, **kwargs):
     """
     Identify providers with unusually high average charges based on z-scores. Returns a summary and a table of outlier providers.
     """
@@ -90,7 +90,7 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5):
         ]
     }
 
-def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90):
+def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90, **kwargs):
     _require_cols(df, ["provider_id", "patient_id", "claim_date"])
     d = df.copy()
 
@@ -128,7 +128,7 @@ def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90):
     }
 
 
-def risk_scoring(df: pd.DataFrame, cohort: str = None):
+def risk_scoring(df: pd.DataFrame, cohort: str = None, **kwargs):
     """
     Compute a synthetic risk score for each patient.
     - Uses available fields like charge_amount, num_procedures, and wait_days.
