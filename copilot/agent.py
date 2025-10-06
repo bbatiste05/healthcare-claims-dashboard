@@ -166,6 +166,11 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                     tool_result = {"summary": str(tool_result), "table": []}
 
                 # ✅ Feed normalized tool result back to GPT for final formatting
+                try:
+                    safe_tool_content = json.dumps(tool_result, default=str, indent=2)
+                except Exception as e:
+                    safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
+                    
                 follow = client.chat.completions.create(
                     model="gpt-4.1-mini",
                     messages=[
@@ -179,9 +184,8 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                         {
                             "role": "user",
                             "content": (
-                                "Format the final answer as valid JSON with keys: "
-                                "summary, tables, figures, citations, next_steps. "
-                                "If a tool result contains both summary and table data, include both."
+                                "Return a concise JSON with keys: summary, tabls, figures, citations, next_steps. "
+                                "Avoid repeating long tables or nested JSON. If data is tool long, summarize it instead."
                             ),
                         },
                     ],
