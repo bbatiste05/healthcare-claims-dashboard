@@ -153,14 +153,12 @@ def risk_scoring(df: pd.DataFrame, cohort: str = None, **kwargs):
         0.1 * (d["wait_days"] / (d["wait_days"].max() if d["wait_days"].max() != 0 else 1))
     ).round(3)
 
-    # --- Filter cohort if specified ---
-    if cohort:
-        cohort_lower = cohort.lower()
-        d = d[d.apply(lambda row: cohort_lower in str(row).lower(), axis=1)]
+    if cohort and cohort.lower() == "cardiology":
+        d = d[d["icd10"].str.startswith("I", na=False)]  # I00–I99 range = circulatory system
 
     if d.empty:
         return {
-            "summary": f"No patients matched the cohort '{cohort}'.",
+            "summary": f"No patients matched the cohort '{cohort}', so average patient risk scores could not be calculated.",
             "table": []
         }
 
