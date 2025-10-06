@@ -172,7 +172,11 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 except Exception as e:
                     safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
 
-                tool_id = getattr(tc, "id", "tool_1")
+                tool_id = None
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    tool_id = getattr(msg.tool_calls[0], "id", "tool_1")
+                else:
+                    tool_id = getattr(tc, "id", "tool_1")
 
                 def _clean_msg(m):
                     role = m.get("role", "user")
