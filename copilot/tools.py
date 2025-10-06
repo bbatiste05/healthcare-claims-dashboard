@@ -2,11 +2,26 @@
 import pandas as pd
 import numpy as np
 
+def _safe_run(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            return {
+                "summary": f"⚠️ Tool execution failed: {e}",
+                "table_name": "error",
+                "table": [],
+                "citations": [],
+                "next_steps": ["Verify data format and column names."]
+            }
+    return wrapper
+
 def _require_cols(df: pd.DataFrame, cols):
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
+@_safe_run        
 def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10):
     # ✅ Flexible column name mapping
     df = df.copy()
@@ -62,7 +77,7 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
 
 
 
-
+@_safe_run 
 def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, **kwargs):
     """
     Identify providers with unusually high average charges based on z-scores. Returns a summary and a table of outlier providers.
@@ -109,7 +124,7 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, *
             "Review charge composition by procedure type."
         ]
     }
-
+@_safe_run 
 def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90, **kwargs):
     _require_cols(df, ["provider_id", "patient_id", "claim_date"])
     d = df.copy()
@@ -147,7 +162,7 @@ def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90, **k
         ]
     }
 
-
+@_safe_run 
 def risk_scoring(df: pd.DataFrame, cohort: str = None, **kwargs):
     """
     Compute a synthetic risk score for each patient.
