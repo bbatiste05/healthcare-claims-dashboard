@@ -77,34 +77,32 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
 
 
 
-@_safe_run 
+@_safe_run
 def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, period=None, **kwargs):
     """
-    Detect anomalies
-    - If 'period' is given with 'compare' (e.g. '2024Q1_vs_2024Q2'), compares quarters.
-    - Otherwise computes z-score outliers for total or mean charges.
+    Detect anomalies in provider billing patterns or compare quarters.
     """
-    
+
+    # --- 1️⃣ Validate columns ---
     required = ["provider_id", "charge_amount"]
     missing = [c for c in required if c not in df.columns]
     if missing:
-       raise ValueError(f"Missing required columns: {missing}") 
-    
-                
+        raise ValueError(f"Missing required columns: {missing}")
+
     d = df.copy()
 
+    # --- 2️⃣ Robust charge cleaning ---
+    # remove currency symbols, commas, etc.
     d["charge_amount"] = (
         d["charge_amount"]
         .astype(str)
         .str.replace(r"[^0-9.\-]", "", regex=True)
         .replace("", pd.NA)
-    
-
-        
-    d["charge_amount"] = pd.to_numeric(d["charge_amount"], error="coerce")
+    )
+    d["charge_amount"] = pd.to_numeric(d["charge_amount"], errors="coerce")
     d.dropna(subset=["charge_amount", "provider_id"], inplace=True)
 
-     # --- 3️⃣ Flexible date parsing ---
+    # --- 3️⃣ Flexible date parsing ---
     date_candidates = ["claim_date", "service_date", "date_of_service", "transaction_date"]
     found_date_col = next((c for c in date_candidates if c in d.columns), None)
 
@@ -124,25 +122,24 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 "table_name": "provider_quarter_comparison",
                 "table": [],
             }
-    
-   # --- Optional filter by code (ICD or CPT) ---
+
+    # --- 4️⃣ Optional filter by code ---
     if code:
         for c in ["cpt", "icd10"]:
             if c in d.columns:
                 d = d[d[c].astype(str) == str(code)]
 
-    # --- Detect comparison type ---
+    # --- 5️⃣ Quarter comparison logic ---
     if period and "_vs_" in str(period):
-        
-        # Compare between two quarters (e.g., '2024Q1_vs_2024Q2')
         try:
             q1, q2 = period.split("_vs_")
             qmap = {"Q1": (1, 3), "Q2": (4, 6), "Q3": (7, 9), "Q4": (10, 12)}
 
-            # Extract year and quarter safely
             d["year"] = d["claim_date"].dt.year
             d["month"] = d["claim_date"].dt.month
-            d["quarter"] = d["month"].apply(lambda m: next((q for q, (start, end) in qmap.items() if start <= m <= end), None))
+            d["quarter"] = d["month"].apply(
+                lambda m: next((q for q, (start, end) in qmap.items() if start <= m <= end), None)
+            )
             d["period"] = d["year"].astype(str) + d["quarter"]
 
             pivot = (
@@ -155,12 +152,13 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 pivot["Δ_Charge"] = pivot[q2] - pivot[q1]
                 pivot["Δ_%"] = ((pivot[q2] - pivot[q1]) / pivot[q1].replace(0, pd.NA)) * 100
                 pivot = pivot.reset_index()
-                pivot["Flagged"] = pivot["Δ_%"].abs() >= 20  # Flag ≥20% change
+                pivot["Flagged"] = pivot["Δ_%"].abs() >= 20
 
                 summary = (
-                    f"Compared provider billing anomalies between {q1} and {q2}. "
-                    f"{(pivot['Flagged']).sum()} providers showed ≥20% change in charges."
-                )    
+                    f"Compared provider billing between {q1} and {q2}. "
+                    f"{pivot['Flagged'].sum()} providers showed ≥20% change. "
+                    f"Sample size: {len(pivot)} providers."
+                )
 
                 return {
                     "summary": summary,
@@ -169,10 +167,11 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 }
             else:
                 return {
-                    "summary": f"Could not find both {q1} and {q2} data columns for comparison.",
+                    "summary": f"Could not find both {q1} and {q2} columns for comparison. "
+                               f"Available: {list(pivot.columns)}",
                     "table_name": "provider_quarter_comparison",
                     "table": [],
-                }    
+                }
 
         except Exception as e:
             return {
@@ -181,7 +180,7 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 "table": [],
             }
 
-    # --- Default z-score anomaly detection ---
+    # --- 6️⃣ Default z-score anomaly detection ---
     agg = d.groupby("provider_id")["charge_amount"].sum().to_frame("total_charge")
     mu, sigma = agg["total_charge"].mean(), agg["total_charge"].std(ddof=0)
     agg["zscore"] = (agg["total_charge"] - mu) / (sigma if sigma != 0 else 1.0)
@@ -198,6 +197,7 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
         "table_name": "provider_outliers",
         "table": outliers[["provider_id", "total_charge", "Flagged"]],
     }
+
 
 
 @_safe_run 
