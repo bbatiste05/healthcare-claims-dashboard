@@ -165,3 +165,100 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
         "table_name": "provider_outliers",
         "table": outliers[["provider_id", "total_charge", "zscore", "Flagged"]],
     }
+
+
+@_safe_run 
+def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90, **kwargs):
+    _require_cols(df, ["provider_id", "patient_id", "claim_date"])
+    d = df.copy()
+
+    # Aggregate claims per patient per provider within the window
+    flagged = (
+        d.groupby(["provider_id", "patient_id"])
+        .size()
+        .reset_index(name="claim_count")
+    )
+    flagged = flagged[flagged["claim_count"] > min_claims_per_patient]
+
+    total_providers = d["provider_id"].nunique()
+    max_claims = d.groupby("patient_id").size().max()
+
+    if flagged.empty:
+        summary = (
+            f"No providers were flagged for having more than {min_claims_per_patient} "
+            f"claims per patient in the past {window_days} days. "
+            f"Across {total_providers} providers, the highest observed count was {max_claims}."
+        )
+    else:
+        summary = (
+            f"{flagged['provider_id'].nunique()} providers exceeded "
+            f"{min_claims_per_patient} claims per patient within {window_days} days."
+        )
+
+    return {
+        "summary": summary,
+        "tables": [flagged.to_dict(orient="records")],
+        "citations": ["claims.csv"],
+        "next_steps": [
+            f"Re-run this analysis monthly to track new patterns exceeding {min_claims_per_patient} claims per patient.",
+            "Investigate flagged providers’ billing justification and patient volume trends."
+        ]
+    }
+
+
+@_safe_run 
+def risk_scoring(df: pd.DataFrame, cohort: str = None, **kwargs):
+    """
+    Compute a synthetic risk score for each patient.
+    - Uses available fields like charge_amount, num_procedures, and wait_days.
+    - Optionally filters to a specific cohort (e.g., 'cardiology').
+    """
+
+    required_cols = ["patient_id", "charge_amount", "num_procedures", "wait_days"]
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        return {
+            "summary": f"Missing required columns: {', '.join(missing)}",
+            "table": []
+        }
+
+    d = df.copy()
+
+    # --- Generate a synthetic risk score ---
+    # Normalize and weight common claim factors
+    d["risk_score"] = (
+        0.6 * (d["charge_amount"] / d["charge_amount"].max()) +
+        0.3 * (d["num_procedures"] / d["num_procedures"].max()) +
+        0.1 * (d["wait_days"] / (d["wait_days"].max() if d["wait_days"].max() != 0 else 1))
+    ).round(3)
+
+    if cohort and cohort.lower() == "cardiology":
+        d = d[d["icd10"].str.startswith("I", na=False)]  # I00–I99 range = circulatory system
+
+    if d.empty:
+        return {
+            "summary": f"No patients matched the cohort '{cohort}', so average patient risk scores could not be calculated.",
+            "table": []
+        }
+
+    # --- Aggregate by patient ---
+    agg = (
+        d.groupby("patient_id")["risk_score"]
+        .mean()
+        .reset_index()
+        .rename(columns={"risk_score": "avg_risk_score"})
+    )
+
+    # --- Compute overall stats ---
+    avg_risk = round(agg["avg_risk_score"].mean(), 3)
+    summary = (
+        f"Average risk score across {len(agg)} patients"
+        + (f" in the '{cohort}' cohort" if cohort else "")
+        + f" is {avg_risk}."
+    )
+
+    return {
+        "summary": summary,
+        "table_name": "patient_risk_scores",
+        "table": agg.head(10).to_dict(orient="records")
+    }
