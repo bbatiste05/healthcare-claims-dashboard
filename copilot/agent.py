@@ -171,29 +171,40 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 except Exception as e:
                     safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
 
+                tool_id = getattr(tc, "id", "tool_1")
+
+                clean_messages = []
+                for m in messages:
+                    clean_messages.append({
+                        "role": m.get("role", "user"),
+                        "content": str(m.get("content", ""))[:5000] 
+                    })
+                
+                follow_messages = [
+                    *clean_messages,
+                    {
+                        "role": "assistant",
+                        "content": f"Tool '{fn}' executed successfully and returned structured data."
+                    },
+                    {
+                        "role": "tool",
+                        "content": safe_tool_content,
+                        "tool_call_id": str(tool_id)
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            "Please format the following tool output as valid JSON with keys: "
+                            "summary, tables, figures, citations, next_steps. "
+                            "Ensure the JSON is syntactically correct and concise."
+                        )
+                    }
+                ]
+                
                 follow = client.chat.completions.create(
                     model="gpt-4.1-mini",
-                    messages=[
-                        *messages,
-                        {
-                            "role": "assistant",
-                            "content": "Invoking tool function based on request.",
-                            "tool_calls": msg.tool_calls
-                        },
-                        {
-                            "role": "tool",
-                            "content": safe_tool_content,
-                            "tool_call_id": msg.tool_calls[0].id if msg.tool_calls else "tool_1"
-                        },
-                        {
-                            "role": "user",
-                            "content": (
-                                "Format the final answer as valid JSON with keys: summary, tables, figures, citations, next_steps. "
-                                "Ensure it is valid JSON and concise (avoid long data dumps)."
-                            )
-                        }
-                    ],
-                    temperature=0.2,
+                    messages=follow_messages,
+                       temperature=0.2
                 )
 
                 # ✅ Parse GPT’s formatted JSON output
