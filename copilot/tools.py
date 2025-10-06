@@ -92,18 +92,38 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
     
                 
     d = df.copy()
+
+    d["charge_amount"] = (
+        d["charge_amount"]
+        .astype(str)
+        .str.replace(r"[^0-9.\-]", "", regex=True)
+        .replace("", pd.NA)
     
-    # --- Normalize possible date column names ---
+
+        
+    d["charge_amount"] = pd.to_numeric(d["charge_amount"], error="coerce")
+    d.dropna(subset=["charge_amount", "provider_id"], inplace=True)
+
+     # --- 3️⃣ Flexible date parsing ---
     date_candidates = ["claim_date", "service_date", "date_of_service", "transaction_date"]
     found_date_col = next((c for c in date_candidates if c in d.columns), None)
 
     if found_date_col:
-        d["claim_date"] = pd.to_datetime(d[found_date_col], errors="coerce", infer_datetime_format=True)
+        d["claim_date"] = pd.to_datetime(
+            d[found_date_col], errors="coerce", infer_datetime_format=True
+        )
     else:
         d["claim_date"] = pd.NaT
-        
-    d["charge_amount"] = pd.to_numeric(d["charge_amount"], error="coerce")
-    d.dropna(subset=["charge_amount"], inplace=True)
+
+    # Remove rows without valid dates when comparing periods
+    if period and "_vs_" in str(period):
+        d = d.dropna(subset=["claim_date"])
+        if d.empty:
+            return {
+                "summary": f"No valid date entries found to compare {period}.",
+                "table_name": "provider_quarter_comparison",
+                "table": [],
+            }
     
    # --- Optional filter by code (ICD or CPT) ---
     if code:
@@ -113,6 +133,7 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
 
     # --- Detect comparison type ---
     if period and "_vs_" in str(period):
+        
         # Compare between two quarters (e.g., '2024Q1_vs_2024Q2')
         try:
             q1, q2 = period.split("_vs_")
