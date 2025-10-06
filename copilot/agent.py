@@ -188,16 +188,23 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
                 follow_messages = [
                     *clean_messages,
-                    {"role": "assistant", "content": f"Tool '{fn}' executed successfully."},
+                    {"role": "assistant", "content": None, "tool_calls": [
+                        {
+                            "id": str(tool_id),
+                            "type": "function",
+                            "function": {"name": fn, "arguments": json.dumps(args)},
+                        },
+                    ], 
+                     
                     {"role": "tool", "content": safe_tool_content, "tool_call_id": str(tool_id)},
-                    {
+                    {   
                         "role": "user",
                         "content": (
                             "Format the final answer as valid JSON with keys: "
                             "summary, tables, figures, citations, next_steps. "
                             "Ensure JSON syntax is correct, concise, and under 2000 tokens."
                         ),
-                    },
+                    }
                 ]
 
                 try:
