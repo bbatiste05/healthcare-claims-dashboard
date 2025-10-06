@@ -38,5 +38,21 @@ FEW_SHOTS = [
             "citations": ["icd.csv"],
             "next_steps": ["Investigate cost drivers for top ICD-10 codes to identify trends."]
         }"""
+    },
+    {
+        "user": "Show the top 5 cost drivers across all claims?",
+        "assistant": """{
+            "summary": ["The top 5 cost drivers across all claims were ICD-10 codes V5789, 41401, 0389, 486, and 41071."],
+            "tables": [[
+                {"ICD-10 Code": "V5789", "Total Cost": 18449000, "Cost Share (%)": 17.18},
+                {"ICD-10 Code": "41401", "Total Cost": 16713880, "Cost Share (%)": 15.57},
+                {"ICD-10 Code": "0389",  "Total Cost": 14227040, "Cost Share (%)": 13.25},
+                {"ICD-10 Code": "486",   "Total Cost": 12174000, "Cost Share (%)": 11.34},
+                {"ICD-10 Code": "41071", "Total Cost": 11032000, "Cost Share (%)": 10.28}
+            ]],
+            "figures": [],
+            "citations": ["icd.csv"],
+            "next_steps": ["Analyze contributing factors to high-cost ICD-10 codes."]
+        }"""
     }
 ]
