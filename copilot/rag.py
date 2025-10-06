@@ -3,52 +3,51 @@ import pandas as pd
 from pathlib import Path
 
 class SimpleRAG:
-    """
-    Simple Retrieval-Augmented Generation (RAG) utility.
-    Loads optional local reference data (ICD, CPT, provider metadata)
-    and returns lightweight 'snippets' to provide external context to GPT.
-    """
-
-    def __init__(self, base_dir: str | Path = "data/"):
-        # Ensure the path works whether a string or Path object is passed
+    def __init__(self, base_dir: str):
         self.base = Path(base_dir)
-        self.icd = None
-        self.cpt = None
-        self.nppes = None
+        self.icd = self._load_csv('data/external/icd10.csv', expected_cols=['code','system','short_title'])
+        self.cpt = self._load_csv('data/external/cpt.csv', expected_cols=['code','system','short_title'])
+        self.nppes = self._load_csv('data/external/nppes.csv', expected_cols=['npi','provider_name','taxonomy_specialty','state'])
 
-        # Try loading any local reference files if they exist
-        self._load_references()
-
-    def _load_references(self):
-        """Load optional ICD, CPT, and NPPES reference CSVs."""
-        try:
-            if (self.base / "icd.csv").exists():
-                self.icd = pd.read_csv(self.base / "icd.csv")
-            if (self.base / "cpt.csv").exists():
-                self.cpt = pd.read_csv(self.base / "cpt.csv")
-            if (self.base / "nppes.csv").exists():
-                self.nppes = pd.read_csv(self.base / "nppes.csv")
-        except Exception as e:
-            print(f"[SimpleRAG] Warning: failed to load references: {e}")
+    def _load_csv(self, rel, expected_cols=None):
+        p = self.base / rel
+        if p.exists():
+            df = pd.read_csv(p)
+            if expected_cols:
+                missing = [c for c in expected_cols if c not in df.columns]
+                if missing:
+                    raise ValueError(f"{rel} missing columns: {missing}")
+            return df
+        else:
+            return pd.DataFrame()
 
     def search(self, query: str, k: int = 5):
-        """
-        Return lightweight text snippets that GPT can use as external context.
-        This is intentionally simple — you could later expand with embeddings or BM25.
-        """
-        snippets = []
+        hits = []
+        q = str(query).lower()
+        for name, df in [('icd10', self.icd), ('cpt', self.cpt)]:
+            for _, row in df.iterrows():
+                hay = ' '.join(map(str, row.values)).lower()
+                if any(tok in hay for tok in q.split()):
+                    hits.append({"source": name, "row": row.to_dict()})
+                    if len(hits) >= k:
+                        break
+        return hits
 
-        # Match keywords to ICD/CPT if present
-        if self.icd is not None and "icd" in query.lower():
-            results = self.icd.head(k).to_dict(orient="records")
-            snippets.extend(results)
+    def lookup_code(self, code: str):
+        code = str(code).upper()
+        r = {}
+        if not self.icd.empty:
+            match = self.icd[self.icd['code'].astype(str).str.upper() == code]
+            if not match.empty:
+                r['icd10'] = match.iloc[0].to_dict()
+        if not self.cpt.empty:
+            match = self.cpt[self.cpt['code'].astype(str).str.upper() == code]
+            if not match.empty:
+                r['cpt'] = match.iloc[0].to_dict()
+        return r
 
-        if self.cpt is not None and "cpt" in query.lower():
-            results = self.cpt.head(k).to_dict(orient="records")
-            snippets.extend(results)
-
-        if self.nppes is not None and "provider" in query.lower():
-            results = self.nppes.head(k).to_dict(orient="records")
-            snippets.extend(results)
-
-        return snippets
+    def lookup_npi(self, npi: str):
+        if self.nppes.empty:
+            return {}
+        m = self.nppes[self.nppes['npi'].astype(str) == str(npi)]
+        return m.iloc[0].to_dict() if not m.empty else {}
