@@ -7,86 +7,38 @@ def _require_cols(df: pd.DataFrame, cols):
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-def top_icd_cpt_cost(
-    df: pd.DataFrame,
-    icd: str = None,
-    cpt: str = None,
-    period: str = None,
-    plan: str = None,
-    top_n: int = 10,
-    **kwargs
-):
-    """
-    Compute top ICD-10 or CPT codes by total cost, filtered by optional parameters.
-    Automatically detects ICD vs CPT mode if called with guardrail.
-    """
+def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10):
+    _require_cols(df, ["charge_amount", "service_date"])
+    d = df.copy()
 
-    # --- 1️⃣ Validate and prepare
-    if df.empty:
-        return {"error": "No data available."}
+    # Filter by ICD or CPT if provided
+    if icd:
+        d = d[d["icd10"].astype(str).str.startswith(icd)]
+    if cpt:
+        d = d[d["cp"].astype(str) == str(cpt)]
 
-    # Normalize columns
-    df = df.rename(columns={c.lower(): c for c in df.columns})
+    # Time filter
+    if period:
+        d["dt"] = pd.to_datetime(d["service_date"])
+        if "Q" in str(period):  # e.g., 2024Q2
+            year = int(period[:4]); q = int(period[-1])
+            d = d[(d["dt"].dt.year == year) & (d["dt"].dt.quarter == q)]
+        elif ":" in str(period):  # e.g., 2024-01:2024-06
+            start, end = str(period).split(":")
+            d = d[(d["dt"] >= start) & (d["dt"] <= end)]
 
-    # Determine which column to use
-    icd_col = next((c for c in df.columns if "icd" in c.lower()), None)
-    cpt_col = next((c for c in df.columns if "cpt" in c.lower()), None)
-    cost_col = next((c for c in df.columns if "charge" in c.lower() or "cost" in c.lower()), None)
-    date_col = next((c for c in df.columns if "date" in c.lower()), None)
+    # Group by CPT (cp) if available
+    if "cp" in d.columns:
+        g = d.groupby("cp")["charge_amount"].sum().sort_values(ascending=False).head(top_n)
+        table = g.reset_index().rename(columns={"charge_amount": "total_charge"})
+        table["share"] = table["total_charge"] / table["total_charge"].sum()
+        return {"table_name": "cost_drivers", "table": table}
+    else:
+        g = d.groupby("icd10")["charge_amount"].sum().sort_values(ascending=False).head(top_n)
+        table = g.reset_index().rename(columns={"charge_amount": "total_charge"})
+        table["share"] = table["total_charge"] / table["total_charge"].sum()
+        return {"table_name": "cost_drivers", "table": table}
 
-    if not cost_col:
-        return {"error": "No cost or charge column found."}
-
-    # --- 2️⃣ Apply time filter (if period like '2024Q2')
-    if period and date_col:
-        try:
-            df[date_col] = pd.to_datetime(df[date_col])
-            if "Q" in period:
-                year, q = period[:4], int(period[-1])
-                q_start = pd.Timestamp(f"{year}-{3 * (q - 1) + 1:02d}-01")
-                q_end = (q_start + pd.offsets.QuarterEnd())
-                df = df[(df[date_col] >= q_start) & (df[date_col] <= q_end)]
-        except Exception:
-            pass  # quietly skip bad period filters
-
-    # --- 3️⃣ Choose grouping column (guardrail behavior)
-    mode = "ICD"
-    group_col = icd_col
-
-    if cpt and not icd:
-        mode = "CPT"
-        group_col = cpt_col
-
-    if group_col is None:
-        return {"error": f"No {mode} column found in dataset."}
-
-    # --- 4️⃣ Aggregate top cost drivers
-    grouped = (
-        df.groupby(group_col)[cost_col]
-        .sum()
-        .reset_index()
-        .rename(columns={group_col: f"{mode} Code", cost_col: "Total Cost"})
-        .sort_values("Total Cost", ascending=False)
-        .head(top_n)
-    )
-
-    # Compute cost share
-    total_cost = grouped["Total Cost"].sum()
-    grouped["Cost Share (%)"] = (grouped["Total Cost"] / total_cost * 100).round(2)
-
-    # --- 5️⃣ Return structured output for UI
-    summary = [
-        f"Top {mode} codes by cost in {period or 'the selected period'} "
-        f"with {mode} {grouped.iloc[0][f'{mode} Code']} leading at "
-        f"${grouped.iloc[0]['Total Cost']:,} ({grouped.iloc[0]['Cost Share (%)']}%)."
-    ]
-
-    return {
-        "summary": summary,
-        "tables": [grouped.to_dict(orient="records")],
-        "citations": [f"{mode.lower()}.csv"],
-        "next_steps": [f"Review high-cost {mode} codes for anomalies or overutilization."]
-    }
 
 
 
