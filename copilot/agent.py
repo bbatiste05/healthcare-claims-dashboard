@@ -105,7 +105,7 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
 # ------------------------------
 # 3. Call local Python tools
 # ------------------------------
-def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, usr_q: str = ""):  
+def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = ""):  
     if name == "top_icd_cpt_cost":
         return top_icd_cpt_cost(df, **args)
     if name == "provider_anomalies":
