@@ -165,70 +165,98 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 else:
                     tool_result = {"summary": str(tool_result), "table": []}
 
+                # ✅ Safe version for /chat/completions endpoint
                 import traceback
-
-        try:
-            safe_tool_content = json.dumps(tool_result, default=str, indent=2)
-        except Exception as e:
-            safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
-
-        tool_id = getattr(tc, "id", "tool_1")
-
-        def _clean_msg(m):
-            role = m.get("role", "user")
-            content = m.get("content", "")
-            if not isinstance(content, str):
                 try:
-                    content = json.dumps(content, default=str)
+                    safe_tool_content = json.dumps(tool_result, default=str, indent=2)
+                except Exception as e:
+                    safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
+
+                tool_id = getattr(tc, "id", "tool_1")
+
+                def _clean_msg(m):
+                    role = m.get("role", "user")
+                    content = m.get("content", "")
+                    if not isinstance(content, str):
+                        try:
+                            content = json.dumps(content, default=str)
+                        except Exception:
+                            content = str(content)
+                    return {"role": role, "content": content[:4000]}
+
+                clean_messages = [_clean_msg(m) for m in messages]
+
+                follow_messages = [
+                    *clean_messages,
+                    {"role": "assistant", "content": f"Tool '{fn}' executed successfully."},
+                    {"role": "tool", "content": safe_tool_content, "tool_call_id": str(tool_id)},
+                    {
+                        "role": "user",
+                        "content": (
+                            "Format the final answer as valid JSON with keys: "
+                            "summary, tables, figures, citations, next_steps. "
+                            "Ensure JSON syntax is correct, concise, and under 2000 tokens."
+                        ),
+                    },
+                ]
+
+                try:
+                    st.write("🧩 follow_messages length:", len(follow_messages))
+                    st.write("✅ All content types stringified:", all(isinstance(m['content'], str) for m in follow_messages))
                 except Exception:
-                    content = str(content)
-            return {"role": role, "content": content[:4000]}
+                    pass
 
-        clean_messages = [_clean_msg(m) for m in messages]
+                try:
+                    follow = client.chat.completions.create(
+                        model="gpt-4.1-mini",
+                        messages=follow_messages,
+                        temperature=0.2,
+                    )
+                except Exception as e:
+                    st.error(f"❌ GPT follow-up failed: {e}")
+                    st.write(traceback.format_exc())
+                    return {
+                        "summary": [f"Error during GPT follow-up: {str(e)}"],
+                        "tables": [],
+                        "figures": [],
+                        "citations": [],
+                        "next_steps": []
+                    }
 
-        follow_messages = [
-            *clean_messages,
-            {"role": "assistant", "content": f"Tool '{fn}' executed successfully."},
-            {"role": "tool", "content": safe_tool_content, "tool_call_id": str(tool_id)},
-            {
-                "role": "user",
-                "content": (
-                    "Format the final answer as valid JSON with keys: "
-                    "summary, tables, figures, citations, next_steps. "
-                    "Ensure JSON syntax is correct, concise, and under 2000 tokens."
-                ),
-            },
-        ]
+                # ✅ Parse GPT’s formatted JSON output
+                final_answer = follow.choices[0].message.content
+                try:
+                    parsed = json.loads(final_answer)
+                    for k in result_payload.keys():
+                        if isinstance(parsed.get(k), str):
+                            result_payload[k] = [parsed.get(k)]
+                        else:
+                            result_payload[k] = parsed.get(k, result_payload[k])
 
-        try:
-            st.write("🧩 follow_messages length:", len(follow_messages))
-            st.write("✅ All content types stringified:", all(isinstance(m['content'], str) for m in follow_messages))
-        except Exception:
-            pass
+                    # Normalize table structure
+                    if "tables" in result_payload:
+                        fixed_tables = []
+                        for t in result_payload["tables"]:
+                            if isinstance(t, dict):
+                                fixed_tables.append(t)
+                            elif isinstance(t, list):
+                                fixed_tables.extend(t)
+                        result_payload["tables"] = fixed_tables
 
-        try:
-            follow = client.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=follow_messages,
-                temperature=0.2,
-            )
-        except Exception as e:
-            st.error(f"❌ GPT follow-up failed: {e}")
-            st.write(traceback.format_exc())
-            return {
-                "summary": [f"Error during GPT follow-up: {str(e)}"],
-                "tables": [],
-                "figures": [],
-                "citations": [],
-                "next_steps": []
-            }
+                except Exception:
+                    result_payload["summary"].append(final_answer)
 
-        # ✅ Parse GPT’s formatted JSON output
-        final_answer = follow.choices[0].message.content
-        try:
-            parsed = json.loads(final_answer)
-            for k in result_payload.keys():
-                if isinstance(parsed.get(k), str):
-                    result_payload[k] = [parsed.get(k)]
-                else:
-                    result_payload[k] = parsed.get(k, result_
+                return result_payload
+
+        # 3. Fallback if no tools invoked
+        result_payload["summary"].append(msg.content or "No tools invoked.")
+        return result_payload
+
+    except openai.RateLimitError:
+        return {
+            "summary": ["⚠️ Rate limit reached. Please wait a few seconds and try again."],
+            "tables": [],
+            "figures": [],
+            "citations": [],
+            "next_steps": []
+        }
