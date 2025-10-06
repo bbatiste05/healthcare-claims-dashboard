@@ -44,16 +44,46 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
 
 
 def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=3.0):
+    """
+    Identify providers with unusually high average charges based on z-scores. Returns a summary and a table of outlier providers.
+    """
+    
     _require_cols(df, ["charge_amount", "provider_id"])
     d = df.copy()
+    
     if code:
         d = d[(d["cp"].astype(str) == str(code)) | (d["icd10"] == code)]
+        
+    #compute
+    agg = (
+        d.groupby("provider_id")["charge_amount"]
+        .mean()
+        .reset_index()
+        .rename(columns={"charge_amount": "mean_charge"})
+    )
 
-    agg = d.groupby("provider_id")["charge_amount"].sum().to_frame("total_charge")
-    mu, sigma = agg["total_charge"].mean(), agg["total_charge"].std(ddof=0)
-    agg["zscore"] = (agg["total_charge"] - mu) / (sigma if sigma != 0 else 1.0)
-    outliers = agg[agg["zscore"] >= float(threshold)].reset_index().sort_values("zscore", ascending=False)
-    return {"table_name": "provider_outliers", "table": outliers}
+    mu, sigma = agg["mean_charge"].mean(), agg["mean_charge"].std(ddof=0)
+    agg["zscore"] = (agg["mean_charge"] - mu) / (sigma if sigma != 0 else 1.0)
+    agg["flag"] = agg["zscore"] >= float(threshold)
+
+    outliers = (
+        agg[agg["flag"]]
+        .sort_values("zscore", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    summary = (
+        f"{len(outliers)} providers exceeded the Z≥{threshold} threshold "
+        f"for unusually high mean charges."
+        if not outliers.empty
+        else "No providers exceeded the anomaly threshold."
+    )
+
+    return {
+        "summary": summary,
+        "table_name": "provider_outliers",
+        "table": outliers.to_dict(orient="records"),
+    }
 
 def fraud_flags(df: pd.DataFrame, min_claims_per_patient=5, window_days=90):
     _require_cols(df, ["service_date", "provider_id", "patient_id"])
