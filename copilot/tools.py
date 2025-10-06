@@ -90,18 +90,43 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5):
         ]
     }
 
-def fraud_flags(df: pd.DataFrame, min_claims_per_patient=5, window_days=90):
-    _require_cols(df, ["service_date", "provider_id", "patient_id"])
+def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90):
+    _require_cols(df, ["provider_id", "patient_id", "claim_date"])
     d = df.copy()
-    d["dt"] = pd.to_datetime(d["service_date"])
-    cutoff = d["dt"].max() - pd.Timedelta(days=window_days)
-    d = d[d["dt"] >= cutoff]
 
-    gp = d.groupby(["provider_id", "patient_id"]).size().to_frame("claims_per_patient")
-    suspicious = gp[gp["claims_per_patient"] >= min_claims_per_patient].reset_index()
-    prov = suspicious.groupby("provider_id")["claims_per_patient"].mean().to_frame("avg_claims_per_patient").reset_index()
-    prov["flag_reason"] = f"avg >= {min_claims_per_patient} claims/patient in last {window_days}d"
-    return {"table_name": "fraud_flags", "table": prov.sort_values("avg_claims_per_patient", ascending=False)}
+    # Aggregate claims per patient per provider within the window
+    flagged = (
+        d.groupby(["provider_id", "patient_id"])
+        .size()
+        .reset_index(name="claim_count")
+    )
+    flagged = flagged[flagged["claim_count"] > min_claims_per_patient]
+
+    total_providers = d["provider_id"].nunique()
+    max_claims = d.groupby("patient_id").size().max()
+
+    if flagged.empty:
+        summary = (
+            f"No providers were flagged for having more than {min_claims_per_patient} "
+            f"claims per patient in the past {window_days} days. "
+            f"Across {total_providers} providers, the highest observed count was {max_claims}."
+        )
+    else:
+        summary = (
+            f"{flagged['provider_id'].nunique()} providers exceeded "
+            f"{min_claims_per_patient} claims per patient within {window_days} days."
+        )
+
+    return {
+        "summary": summary,
+        "tables": [flagged.to_dict(orient="records")],
+        "citations": ["claims.csv"],
+        "next_steps": [
+            f"Re-run this analysis monthly to track new patterns exceeding {min_claims_per_patient} claims per patient.",
+            "Investigate flagged providers’ billing justification and patient volume trends."
+        ]
+    }
+
 
 def risk_scoring(df: pd.DataFrame):
     _require_cols(df, ["patient_id", "icd10"])
