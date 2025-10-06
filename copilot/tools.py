@@ -43,7 +43,7 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
 
 
 
-def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=3.0):
+def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5):
     """
     Identify providers with unusually high average charges based on z-scores. Returns a summary and a table of outlier providers.
     """
