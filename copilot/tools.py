@@ -7,7 +7,7 @@ def _require_cols(df: pd.DataFrame, cols):
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10, **kwargs):
+def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10):
     # ✅ Flexible column name mapping
     df = df.copy()
     df.columns = df.columns.str.lower().str.strip()
@@ -26,10 +26,10 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
                 df.rename(columns={alt: 'charge_amount'}, inplace=True)
                 break
 
-    
+    # Final validation
     _require_cols(df, ["charge_amount", "service_date"])
 
-   # ✅ Main logic
+    # ✅ Main logic
     if icd:
         group_field = "icd10"
     elif cpt:
@@ -57,6 +57,7 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
     ).round(2)
 
     return {"table_name": "cost_drivers", "table": summary}
+
 
 
 
