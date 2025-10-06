@@ -128,10 +128,61 @@ def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90):
     }
 
 
-def risk_scoring(df: pd.DataFrame):
-    _require_cols(df, ["patient_id", "icd10"])
-    chronic_prefixes = ["I1", "E11", "J4", "N18"]  # example: HTN, Diabetes, COPD, CKD
+def risk_scoring(df: pd.DataFrame, cohort: str = None):
+    """
+    Compute a synthetic risk score for each patient.
+    - Uses available fields like charge_amount, num_procedures, and wait_days.
+    - Optionally filters to a specific cohort (e.g., 'cardiology').
+    """
+
+    required_cols = ["patient_id", "charge_amount", "num_procedures", "wait_days"]
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        return {
+            "summary": f"Missing required columns: {', '.join(missing)}",
+            "table": []
+        }
+
     d = df.copy()
-    d["chronic_flag"] = d["icd10"].astype(str).str[:3].isin([p[:3] for p in chronic_prefixes])
-    score = d.groupby("patient_id")["chronic_flag"].sum().to_frame("risk_score").reset_index()
-    return {"table_name": "risk_scores", "table": score.sort_values("risk_score", ascending=False)}
+
+    # --- Generate a synthetic risk score ---
+    # Normalize and weight common claim factors
+    d["risk_score"] = (
+        0.6 * (d["charge_amount"] / d["charge_amount"].max()) +
+        0.3 * (d["num_procedures"] / d["num_procedures"].max()) +
+        0.1 * (d["wait_days"] / (d["wait_days"].max() if d["wait_days"].max() != 0 else 1))
+    ).round(3)
+
+    # --- Filter cohort if specified ---
+    if cohort:
+        cohort_lower = cohort.lower()
+        d = d[d.apply(lambda row: cohort_lower in str(row).lower(), axis=1)]
+
+    if d.empty:
+        return {
+            "summary": f"No patients matched the cohort '{cohort}'.",
+            "table": []
+        }
+
+    # --- Aggregate by patient ---
+    agg = (
+        d.groupby("patient_id")["risk_score"]
+        .mean()
+        .reset_index()
+        .rename(columns={"risk_score": "avg_risk_score"})
+    )
+
+    # --- Compute overall stats ---
+    avg_risk = round(agg["avg_risk_score"].mean(), 3)
+    summary = (
+        f"Average risk score across {len(agg)} patients"
+        + (f" in the '{cohort}' cohort" if cohort else "")
+        + f" is {avg_risk}."
+    )
+
+    return {
+        "summary": summary,
+        "table_name": "patient_risk_scores",
+        "table": agg.head(10).to_dict(orient="records")
+    }
+
