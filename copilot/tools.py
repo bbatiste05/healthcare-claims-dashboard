@@ -8,8 +8,26 @@ def _require_cols(df: pd.DataFrame, cols):
         raise ValueError(f"Missing required columns: {missing}")
 
 def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10, **kwargs):
+    # ✅ Flexible column name mapping
+    df = df.copy()
+    df.columns = df.columns.str.lower().str.strip()
+
+    # Try to normalize key column names
+    if 'service_date' not in df.columns:
+        for alt in ['claim_date', 'date_of_service', 'dos']:
+            if alt in df.columns:
+                df.rename(columns={alt: 'service_date'}, inplace=True)
+                break
+
+    # Same for charge_amount
+    if 'charge_amount' not in df.columns:
+        for alt in ['billed_amount', 'total_charge', 'amount']:
+            if alt in df.columns:
+                df.rename(columns={alt: 'charge_amount'}, inplace=True)
+                break
+
+    
     _require_cols(df, ["charge_amount", "service_date"])
-    d = df.copy()
 
     # Filter by ICD or CPT if provided
     if icd:
