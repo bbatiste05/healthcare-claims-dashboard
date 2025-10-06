@@ -93,16 +93,7 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 
     d = df.copy()
     # --- Normalize possible date column names ---
-    date_cols = ["service_date", "claim_date", "date_of_service", "transaction_date"]
-    found_date_col = next((c for c in date_cols if c in d.columns), None)
-    if found_date_col:
-        d["service_date"] = pd.to_datetime(d[found_date_col], errors="coerce")
-    else:
-        return {
-            "summary": "No valid date column found (expected one of: service_date, claim_date, date_of_service).",
-            "table_name": "provider_quarter_comparison",
-            "table": [],
-        }
+    
         
     d["charge_amount"] = pd.to_numeric(d["charge_amount"], error="coerce")
     d.dropna(subset=["charge_amount"], inplace=True)
@@ -126,8 +117,8 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                         return q
                 return None
 
-            d["quarter"] = pd.to_datetime(d["service_date"]).dt.month.map(_get_q)
-            d["year"] = pd.to_datetime(d["service_date"]).dt.year
+            d["quarter"] = pd.to_datetime(d["claim_date"]).dt.month.map(_get_q)
+            d["year"] = pd.to_datetime(d["claim_date"]).dt.year
 
             d["period"] = d["year"].astype(str) + "Q" + d["quarter"].str[-1]
             pivot = (
