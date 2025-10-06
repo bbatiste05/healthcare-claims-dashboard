@@ -72,17 +72,22 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5):
         .reset_index(drop=True)
     )
 
-    summary = (
-        f"{len(outliers)} providers exceeded the Z≥{threshold} threshold "
-        f"for unusually high mean charges."
-        if not outliers.empty
-        else "No providers exceeded the anomaly threshold."
-    )
+    # 🩹 Fallback — if no outliers found, show top 10 by total charge
+    if outliers.empty:
+        outliers = agg.sort_values("total_charge", ascending=False).head(10).reset_index()
+        summary = "No extreme outliers found; showing top 10 highest billing providers."
+    else:
+        summary = f"{len(outliers)} providers exhibit unusually high billing patterns."
 
+    # ✅ Return JSON-safe dict
     return {
         "summary": summary,
-        "table_name": "provider_outliers",
-        "table": outliers.to_dict(orient="records"),
+        "tables": [outliers.to_dict(orient="records")],
+        "citations": ["claims.csv"],
+        "next_steps": [
+            "Audit providers with top Z-scores for potential overbilling.",
+            "Review charge composition by procedure type."
+        ]
     }
 
 def fraud_flags(df: pd.DataFrame, min_claims_per_patient=5, window_days=90):
