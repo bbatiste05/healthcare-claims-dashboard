@@ -10,9 +10,6 @@ from .prompts import SYSTEM_PROMPT, FEW_SHOTS
 from .tools import top_icd_cpt_cost, provider_anomalies, fraud_flags, risk_scoring
 from .rag import SimpleRAG
 
-import os
-print("CWD:", os.getcwd())
-print("Files:", os.listdir())
 
 
 
@@ -108,14 +105,7 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
 # ------------------------------
 # 3. Call local Python tools
 # ------------------------------
-def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = ""):
-
-    # 🛡️ Guardrail: default ICD/CPT context
-    if "icd" in user_q.lower() and "icd" not in args:
-        args["icd"] = "ALL"
-    elif "cpt" in user_q.lower() and "cpt" not in args:
-        args["cpt"] = "ALL"
-        
+def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame):  
     if name == "top_icd_cpt_cost":
         return top_icd_cpt_cost(df, **args)
     if name == "provider_anomalies":
