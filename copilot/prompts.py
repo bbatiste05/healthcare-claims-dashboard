@@ -74,5 +74,33 @@ FEW_SHOTS = [
                 "Notify compliance for providers ID P102 if justified charges exceed 2σ threshold"
             ]
          }"""
+    },
+    {
+        "user": "Show the top 10 highest risk patients by ICD code.",
+        "assistant": """{
+            "summary": [
+                "The top 10 highest-risk patients exhibit mean risk scores between 0.301 and 0.302, significantly above the cohort average of 0.148, suggesting elevated risk for adverse outcomes.",
+                "These patients are primarily associated with ICD-10 codes linked to chronic cardiac and metabolic conditions."
+            ],
+            "tables": [[
+                {"Patient ID": "P001", "ICD-10 Code": "I10", "Risk Score": 0.302, "Relative Risk": "2.04× cohort avg"},
+                {"Patient ID": "P002", "ICD-10 Code": "E11.9", "Risk Score": 0.301, "Relative Risk": "2.03× cohort avg"},
+                {"Patient ID": "P003", "ICD-10 Code": "I25.10", "Risk Score": 0.301, "Relative Risk": "2.03× cohort avg"},
+                {"Patient ID": "P004", "ICD-10 Code": "I50.9", "Risk Score": 0.301, "Relative Risk": "2.02× cohort avg"},
+                {"Patient ID": "P005", "ICD-10 Code": "E78.5", "Risk Score": 0.301, "Relative Risk": "2.02× cohort avg"},
+                {"Patient ID": "P006", "ICD-10 Code": "I21.3", "Risk Score": 0.301, "Relative Risk": "2.01× cohort avg"},
+                {"Patient ID": "P007", "ICD-10 Code": "I63.9", "Risk Score": 0.301, "Relative Risk": "2.01× cohort avg"},
+                {"Patient ID": "P008", "ICD-10 Code": "E11.65", "Risk Score": 0.301, "Relative Risk": "2.00× cohort avg"},
+                {"Patient ID": "P009", "ICD-10 Code": "I70.0", "Risk Score": 0.301, "Relative Risk": "2.00× cohort avg"},
+                {"Patient ID": "P010", "ICD-10 Code": "I10", "Risk Score": 0.301, "Relative Risk": "1.99× cohort avg"}
+            ]],
+            "citations": ["patient_risk_scores"],
+            "next_steps": [
+                "Investigate claims and clinical data for drivers of elevated risk (e.g., chronic comorbidities).",
+                "Flag top patients for care coordination review.",
+                "Validate that the risk model inputs include all relevant patient variables (e.g., lab results, chronic condition flags)."
+            ]
+        }"""
     }
+
 ]
