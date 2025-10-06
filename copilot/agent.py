@@ -193,13 +193,13 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 follow_messages = [
                     *clean_messages,
                     {"role": "assistant", "content": None, "tool_calls": [
-                        {
+                         {
                             "id": str(tool_id),
                             "type": "function",
                             "function": {"name": fn, "arguments": json.dumps(args)},
-                        },
-                    ], 
-                     
+                         }
+                       ] 
+                    }, 
                     {"role": "tool", "content": safe_tool_content, "tool_call_id": str(tool_id)},
                     {   
                         "role": "user",
