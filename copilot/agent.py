@@ -262,25 +262,50 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             # ✅ Normalize nested lists inside tables
             if "tables" in result_payload:
                 clean_tables = []
+                
                 for t in result_payload["tables"]:
                     # Case 1: If table is a stringified list of dicts
-                    if isinstance(t, str) and t.strip().startswith("["):
+                    if isinstance(t, str):
                         try:
                             parsed = json.loads(t.replace("'", '"'))
                             if isinstance(parsed, list):
                                 clean_tables.extend(parsed)
-                            else:
+                            elif isinstance(parsed, dict):
                                 clean_tables.append(parsed)
+                            else:
+                                clean_table.append({"Raw": str(parsed)})
                         except Exception:
                             clean_tables.append({"Raw": t})
 
                     # Case 2: Already a list of dicts
                     elif isinstance(t, list):
-                        clean_tables.extend(t)
-                    elif isinstance(t, dict):
-                        clean_tables.append(t)
+                        for row in t:
+                            if isinsatnce(row,dict):
+                                clean_tables.append(row)
+                    else:
+                        clean_tables.append({"Value": str(row)})
 
-                result_payload["tables"] = clean_tables
+            elif isinstance(t, dict):
+                clean_tables.append(t)
+
+        # Optional: if quarters detected inside list, flatten that too
+        # e.g. [{"Quarter": "Q1 2024", "Top ICD-10 Codes": [...]}, ...]
+        final_rows = []
+        for row in clean_tables:
+            if isinstance(row, dict):
+                for key, val in row.items():
+                    if isinstance(val, list):
+                        # Expand nested ICD or CPT code lists into separate rows
+                        for sub in val:
+                            if isinstance(sub, dict):
+                                sub["Quarter"] = row.get("Quarter", "")
+                                final_rows.append(sub)
+                            else:
+                                final_rows.append({"Quarter": row.get("Quarter", ""), "Value": str(sub)})
+                    else:
+                        final_rows.append(row)     
+
+                result_payload["tables"] = final_rows
                 return result_payload
 
         # 3. Fallback if no tools invoked
