@@ -86,14 +86,21 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
     """
     
     required = ["provider_id", "charge_amount"]
-    missing = [c for c in required if c not in df.colums]
+    missing = [c for c in required if c not in df.columns]
     if missing:
        raise ValueError(f"Missing required columns: {missing}") 
     
                 
     d = df.copy()
-    # --- Normalize possible date column names ---
     
+    # --- Normalize possible date column names ---
+    date_candidates = ["claim_date", "service_date", "date_of_service", "transaction_date"]
+    found_date_col = next((c for c in date_candidates if c in d.columns), None)
+
+    if found_date_col:
+        d["claim_date"] = pd.to_datetime(d[found_date_col], errors="coerce", infer_datetime_format=True)
+    else:
+        d["claim_date"] = pd.NaT
         
     d["charge_amount"] = pd.to_numeric(d["charge_amount"], error="coerce")
     d.dropna(subset=["charge_amount"], inplace=True)
@@ -111,16 +118,12 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
             q1, q2 = period.split("_vs_")
             qmap = {"Q1": (1, 3), "Q2": (4, 6), "Q3": (7, 9), "Q4": (10, 12)}
 
-            def _get_q(month):
-                for q, (start, end) in qmap.items():
-                    if start <= month <= end:
-                        return q
-                return None
+            # Extract year and quarter safely
+            d["year"] = d["claim_date"].dt.year
+            d["month"] = d["claim_date"].dt.month
+            d["quarter"] = d["month"].apply(lambda m: next((q for q, (start, end) in qmap.items() if start <= m <= end), None))
+            d["period"] = d["year"].astype(str) + d["quarter"]
 
-            d["quarter"] = pd.to_datetime(d["claim_date"]).dt.month.map(_get_q)
-            d["year"] = pd.to_datetime(d["claim_date"]).dt.year
-
-            d["period"] = d["year"].astype(str) + "Q" + d["quarter"].str[-1]
             pivot = (
                 d.groupby(["provider_id", "period"])["charge_amount"]
                 .sum()
@@ -129,20 +132,26 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
 
             if q1 in pivot.columns and q2 in pivot.columns:
                 pivot["Δ_Charge"] = pivot[q2] - pivot[q1]
-                pivot["Δ_%"] = (
-                    (pivot[q2] - pivot[q1]) / pivot[q1].replace(0, pd.NA)
-                ) * 100
+                pivot["Δ_%"] = ((pivot[q2] - pivot[q1]) / pivot[q1].replace(0, pd.NA)) * 100
                 pivot = pivot.reset_index()
-                pivot["Flagged"] = pivot["Δ_%"].abs() >= 20  # mark large changes
+                pivot["Flagged"] = pivot["Δ_%"].abs() >= 20  # Flag ≥20% change
+
                 summary = (
-                    f"Compared provider billing between {q1} and {q2}. "
-                    f"{(pivot['Flagged']).sum()} providers showed ≥20% change."
-                )
+                    f"Compared provider billing anomalies between {q1} and {q2}. "
+                    f"{(pivot['Flagged']).sum()} providers showed ≥20% change in charges."
+                )    
+
                 return {
                     "summary": summary,
                     "table_name": "provider_quarter_comparison",
                     "table": pivot[["provider_id", q1, q2, "Δ_Charge", "Δ_%", "Flagged"]],
                 }
+            else:
+                return {
+                    "summary": f"Could not find both {q1} and {q2} data columns for comparison.",
+                    "table_name": "provider_quarter_comparison",
+                    "table": [],
+                }    
 
         except Exception as e:
             return {
@@ -166,7 +175,7 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
     return {
         "summary": summary,
         "table_name": "provider_outliers",
-        "table": outliers[["provider_id", "total_charge", "zscore", "Flagged"]],
+        "table": outliers[["provider_id", "total_charge", "Flagged"]],
     }
 
 
