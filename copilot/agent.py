@@ -114,9 +114,9 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, usr_q: str = "
         return fraud_flags(df, **args)
     if name == "risk_scoring":
         return risk_scoring(df, **args)
-    return {"error": f"Unknown tool: {name}"}
+    
+    return {"error": f"Unknown tool: {name}", "context": user_q}
 
-return {"error": f"Unknown tool: {name}", "context": user_q}
 
 
 # ------------------------------
