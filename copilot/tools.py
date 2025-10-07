@@ -22,7 +22,7 @@ def _require_cols(df: pd.DataFrame, cols):
         raise ValueError(f"Missing required columns: {missing}")
 
 @_safe_run        
-def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10):
+def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10, **kwargs):
     # ✅ Flexible column name mapping
     df = df.copy()
     df.columns = df.columns.str.lower().str.strip()
@@ -77,7 +77,6 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
 
 
 
-@_safe_run 
 @_safe_run
 def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, period=None, **kwargs):
     """
@@ -95,7 +94,6 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
        raise ValueError(f"Missing required columns: {missing}") 
     
                 
-        raise ValueError(f"Missing required columns: {missing}")
 
     d = df.copy()
 
@@ -106,11 +104,9 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
         .astype(str)
         .str.replace(r"[^0-9.\-]", "", regex=True)
         .replace("", pd.NA)
-    
+    )
 
         
-    d["charge_amount"] = pd.to_numeric(d["charge_amount"], error="coerce")
-    )
     d["charge_amount"] = pd.to_numeric(d["charge_amount"], errors="coerce")
     d.dropna(subset=["charge_amount", "provider_id"], inplace=True)
 
@@ -178,9 +174,6 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 summary = (
                     f"Compared provider billing anomalies between {q1} and {q2}. "
                     f"{(pivot['Flagged']).sum()} providers showed ≥20% change in charges."
-                )    
-                    f"Compared provider billing between {q1} and {q2}. "
-                    f"{pivot['Flagged'].sum()} providers showed ≥20% change. "
                     f"Sample size: {len(pivot)} providers."
                 )
 
@@ -197,7 +190,7 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                     "table_name": "provider_quarter_comparison",
                     "table": [],
                 }    
-                }
+                
 
         except Exception as e:
             return {
