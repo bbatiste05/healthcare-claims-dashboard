@@ -65,6 +65,8 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
     agg["Cost Share (%)"] = (agg["charge_amount"] / agg["charge_amount"].sum() * 100).round(2)
     agg.rename(columns={group_col: group_col.upper(), "charge_amount": "Total Cost"}, inplace=True)
 
+    total_cost = g["charge_amount"].sum()
+
     summary = (
         f"Acrosss all claims, total charges were ${total_cost:,.0f}. "
         f"The top {top_n} ICD/CPT codes charges accounted for {share_top:.1f}% of total cost, "
