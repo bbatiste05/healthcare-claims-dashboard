@@ -163,7 +163,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 tool_id = getattr(tc, "id", "tool_1")
 
                 follow_messages = [
-                    *clean_messages,
+                    *messages,
                     {
                         "role": "assistant",
                         "content": None,
