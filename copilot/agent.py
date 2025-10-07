@@ -110,54 +110,39 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
 # 3. Call local Python tools
 # ------------------------------
 def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = ""):
+    """
+    Dynamically route user questions to the most relevant local tool.
+    Supports flexible phrasing and interchangeable queries across cost, provider, fraud, and risk.
+    """
     user_q_lower = user_q.lower() if isinstance(user_q, str) else ""
 
-  # 🧠 Cost driver detection
-    if (
-        name == "top_icd_cpt_cost"
-        or "cost" in user_q_lower
-        or "charge" in user_q_lower
-        or "driver" in user_q_lower
-        or "expense" in user_q_lower
-    ):
+    # --- Cost drivers (ICD/CPT/period/plan/charge/expense) ---
+    if any(word in user_q_lower for word in ["cost", "charge", "expense", "driver", "top icd", "top cpt", "revenue", "q1", "q2", "quarter"]):
         return top_icd_cpt_cost(df, **args)
 
-    # 🧠 Provider anomaly detection
-    if (
-        name == "provider_anomalies"
-        or "provider" in user_q_lower
-        or "z-score" in user_q_lower
-        or "quarter" in user_q_lower
-        or "compare" in user_q_lower
-        or "billing pattern" in user_q_lower
-    ):
+    # --- Provider anomalies / comparisons ---
+    if any(word in user_q_lower for word in ["provider", "anomaly", "z-score", "outlier", "compare", "billing pattern", "variance", "quarterly change"]):
         return provider_anomalies(df, **args)
 
-    # 🧠 Fraud detection
-    if (
-        name == "fraud_flags"
-        or "fraud" in user_q_lower
-        or "claims per patient" in user_q_lower
-        or "overbilling" in user_q_lower
-    ):
+    # --- Fraud / excessive claims / abuse detection ---
+    if any(word in user_q_lower for word in ["fraud", "flag", "excessive", "claims per patient", "abuse", "overbilling"]):
         return fraud_flags(df, **args)
 
-    # 🧠 Risk scoring or wait-time analysis
-    if (
-        name == "risk_scoring"
-        or "risk" in user_q_lower
-        or "cohort" in user_q_lower
-        or "wait" in user_q_lower
-        or "delay" in user_q_lower
-        or "time to" in user_q_lower
-        or "patient" in user_q_lower
-        or "icd" in user_q_lower
-        or "diagnosis" in user_q_lower
-    ):
+    # --- Risk scoring / wait days / ICD or patient-level risk ---
+    if any(word in user_q_lower for word in ["risk", "patient", "cohort", "wait", "delay", "icd", "diagnosis", "severity", "probability"]):
         return risk_scoring(df, user_q=user_q, **args)
 
-    return {"summary": f"⚠️ Unknown tool: {name}", "table": []}
+    # --- Fallback: rely on GPT-selected name if above heuristics don't match ---
+    if name == "top_icd_cpt_cost":
+        return top_icd_cpt_cost(df, **args)
+    if name == "provider_anomalies":
+        return provider_anomalies(df, **args)
+    if name == "fraud_flags":
+        return fraud_flags(df, **args)
+    if name == "risk_scoring":
+        return risk_scoring(df, user_q=user_q, **args)
 
+    return {"summary": f"⚠️ No matching tool found for query: {user_q}", "table": []}
 
 # ------------------------------
 # 4. Main entrypoint
