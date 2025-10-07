@@ -136,7 +136,7 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = 
     return {"summary": f"⚠️ No matching tool found for query: {user_q}", "table": []}
 
 # ------------------------------
-# 4. Main entrypoint
+# 4. Main entrypoint (final stable version)
 # ------------------------------
 def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
     key = st.secrets.get("OPENAI_API_KEY")
@@ -144,61 +144,56 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
     messages = _messages(user_q, rag)
     tools = _tools_schema()
-
     result_payload = {"summary": [], "tables": [], "figures": [], "citations": [], "next_steps": []}
 
     auto_tool_result = None
-    auto_detected = False
+    auto_detected = False  # ✅ fixed typo
 
     try:
-        auto_tool_result = _call_tool("", {}, df, user_q=user_q)
-        if auto_tool_result and "No matching" not in str(auto_tool_result.get("summary", "")):
-            auto_detected = True
-            st.info(" Auto-detected tool execution based on query intent.")
-    except Exception:
-        st.warning(f"Auto-detect check failed: {e}")
-
-    if not auto_detected:
-        # 1. Ask GPT (tool choice auto-enabled)
-        resp = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            temperature=0.2
-        )
-
-        msg = resp.choices[0].message
-
-        # 2. If GPT requested a tool → run locally
-        if msg.tool_calls:
-            for tc in msg.tool_calls:
-                fn = tc.function.name
-                args = json.loads(tc.function.arguments or "{}")
-                auto_tool_result = _call_tool(fn, args, df, user_q=user_q)
+        # 1️⃣ Try local auto-detection first (keyword-based intent routing)
+        try:
+            auto_tool_result = _call_tool("", {}, df, user_q=user_q)
+            if auto_tool_result and "⚠️ No matching" not in str(auto_tool_result.get("summary", "")):
                 auto_detected = True
-                st.info(f" Tool invoked by GPT: {fn}")
+                st.info("🧠 Auto-detected tool execution based on query intent.")
+        except Exception as e:
+            st.warning(f"Auto-detect check failed: {e}")
 
-    if auto_detected and auto_tool_result:
-        tool_result = auto_tool_result
+        # 2️⃣ If not auto-detected, let GPT choose the tool
+        if not auto_detected:
+            resp = client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.2,
+            )
+            msg = resp.choices[0].message
 
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    fn = tc.function.name
+                    args = json.loads(tc.function.arguments or "{}")
+                    auto_tool_result = _call_tool(fn, args, df, user_q=user_q)
+                    auto_detected = True
+                    st.info(f"🧠 Tool invoked by GPT: {fn}")
 
-                
+        # 3️⃣ If a tool executed successfully (either auto or GPT)
+        if auto_detected and auto_tool_result:
+            tool_result = auto_tool_result
 
-        # ✅ Normalize tool_result into valid JSON for GPT
-        if isinstance(tool_result, dict):
-            if "summary" not in tool_result:
-                tool_result["summary"] = "Tool executed successfully."
+            # Normalize output
+            if isinstance(tool_result, dict):
+                if "summary" not in tool_result:
+                    tool_result["summary"] = "Tool executed successfully."
+                if "table" in tool_result and isinstance(tool_result["table"], pd.DataFrame):
+                    tool_result["table"] = tool_result["table"].to_dict(orient="records")
+            elif isinstance(tool_result, pd.DataFrame):
+                tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
+            else:
+                tool_result = {"summary": str(tool_result), "table": []}
 
-            if "table" in tool_result and isinstance(tool_result["table"], pd.DataFrame):
-                tool_result["table"] = tool_result["table"].to_dict(orient="records")
-
-        elif isinstance(tool_result, pd.DataFrame):
-            tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
-        else:
-            tool_result = {"summary": str(tool_result), "table": []}
-
-        # Populate result payload
+            # Populate result payload
             result_payload["summary"] = [tool_result.get("summary", "")]
             result_payload["tables"] = tool_result.get("table", [])
             result_payload["citations"] = [tool_result.get("table_name", "tool_output")]
