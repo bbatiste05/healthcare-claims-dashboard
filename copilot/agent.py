@@ -156,6 +156,25 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
         st.info(f"Auto-detect: using {_call_tool.__name__ if auto_detected else 'GPT tool selection'}")
 
+        # ✅ Handle auto-detected tool result (direct run, bypassing GPT tool_call)
+        if auto_detected and auto_tool_result:
+            st.info("Auto-detected tool result used directly.")
+
+            # Normalize tool result into standard format
+            if isinstance(auto_tool_result, pd.DataFrame):
+                result_payload["tables"] = auto_tool_result.to_dict(orient="records")
+                result_payload["summary"].append("Tool executed successfully (auto-detected).")
+                return result_payload
+
+            elif isinstance(auto_tool_result, dict):
+                result_payload["summary"].append(auto_tool_result.get("summary", "Tool executed successfully."))
+                if "table" in auto_tool_result:
+                    if isinstance(auto_tool_result["table"], pd.DataFrame):
+                        result_payload["tables"] = auto_tool_result["table"].to_dict(orient="records")
+                    elif isinstance(auto_tool_result["table"], list):
+                        result_payload["tables"] = auto_tool_result["table"]
+                return result_payload
+
 
         # 2. If GPT requested a tool → run locally
         if msg.tool_calls:
