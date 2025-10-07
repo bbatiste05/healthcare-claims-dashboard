@@ -118,6 +118,7 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = 
         or "cost" in user_q_lower
         or "charge" in user_q_lower
         or "driver" in user_q_lower
+        or "expense" in user_q_lower
     ):
         return top_icd_cpt_cost(df, **args)
 
@@ -128,6 +129,7 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = 
         or "z-score" in user_q_lower
         or "quarter" in user_q_lower
         or "compare" in user_q_lower
+        or "billing pattern" in user_q_lower
     ):
         return provider_anomalies(df, **args)
 
@@ -149,6 +151,8 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = 
         or "delay" in user_q_lower
         or "time to" in user_q_lower
         or "patient" in user_q_lower
+        or "icd" in user_q_lower
+        or "diagnosis" in user_q_lower
     ):
         return risk_scoring(df, user_q=user_q, **args)
 
