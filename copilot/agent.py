@@ -262,8 +262,8 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                                 }
                             )
 
-                df_final = pd.DataFrame(final_rows).replace({None: ""}).dropna(how="all")
-                result_payload["tables"] = df_final.to_dict(orient="records")
+            df_final = pd.DataFrame(final_rows).replace({None: ""}).dropna(how="all")
+            result_payload["tables"] = df_final.to_dict(orient="records")
 
         result_payload["summary"].append(msg.content or "No tools invoked.")
         return result_payload
