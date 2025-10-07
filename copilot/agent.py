@@ -175,6 +175,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                     fn = tc.function.name
                     args = json.loads(tc.function.arguments or "{}")
                     auto_tool_result = _call_tool(fn, args, df, user_q=user_q)
+                    st.write(" tool_result preview:", tool_result)
                     auto_detected = True
                     st.info(f"🧠 Tool invoked by GPT: {fn}")
 
