@@ -104,11 +104,11 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = 
 
     if name == "top_icd_cpt_cost" or ("cost" in user_q_lower or "charge" in user_q_lower):
         return top_icd_cpt_cost(df, **args)
-    if name == "provider_anomalies" or ("provider" in user_q_lower or "quarter" in user_q_lower):
+    elif name == "provider_anomalies" or ("provider" in user_q_lower or "quarter" in user_q_lower):
         return provider_anomalies(df, **args)
-    if name == "fraud_flags" or ("fraud" in user_q_lower or "claims per patient" in user_q_lower):
+    elif name == "fraud_flags" or ("fraud" in user_q_lower or "claims per patient" in user_q_lower):
         return fraud_flags(df, **args)
-    if name == "risk_scoring" or ("risk" in user_q_lower or "cohort" in user_q_lower):
+    elif name == "risk_scoring" or ("risk" in user_q_lower or "cohort" in user_q_lower):
         return risk_scoring(df, **args)
 
     return {"summary": "No matching tool found for this query." "table": []}
