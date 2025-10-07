@@ -68,11 +68,15 @@ def _tools_schema() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "risk_scoring",
-                "description": "Compute de-identified risk scores for patients.",
+                "description": (
+                    "Compute patient risk scores or analyze wait times by ICD, cohort, or patient. "
+                    "Handles questions mentioning 'risk', 'wait', 'delay', 'ICD', or 'patients'."
+                ),    
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "cohort": {"type": "string", "nullable": True}
+                        "cohort": {"type": "string", "nullable": True},
+                        "top_n": {"type": "integer", "defauly": 10}
                     }
                 }
             }
