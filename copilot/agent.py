@@ -255,19 +255,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
             result_payload["tables"] = pd.DataFrame(final_rows).replace({None: ""}).to_dict(orient="records")
 
-        # 🧩 Clean up CPT/ICD column names for consistency
-if "tables" in result_payload and result_payload["tables"]:
-    clean_df = pd.DataFrame(result_payload["tables"])
-    rename_map = {
-        "cpt": "CPT Code",
-        "CPT": "CPT Code",
-        "icd10": "ICD-10 Code",
-        "ICD10": "ICD-10 Code",
-        "charge_amount": "Total Cost",
-        "total_cost": "Total Cost",
-    }
-    clean_df.rename(columns={k: v for k, v in rename_map.items() if k in clean_df.columns}, inplace=True)
-    result_payload["tables"] = clean_df.to_dict(orient="records")
+
 
 
         return result_payload
