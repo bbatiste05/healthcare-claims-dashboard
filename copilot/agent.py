@@ -111,7 +111,7 @@ def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = 
     elif name == "risk_scoring" or ("risk" in user_q_lower or "cohort" in user_q_lower):
         return risk_scoring(df, **args)
 
-    return {"summary": "No matching tool found for this query." "table": []}
+    return {"summary": "No matching tool found for this query.", "table": []}
 
 
 # ------------------------------
