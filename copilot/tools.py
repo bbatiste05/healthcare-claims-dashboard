@@ -66,13 +66,22 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
     agg.rename(columns={group_col: group_col.upper(), "charge_amount": "Total Cost"}, inplace=True)
 
     summary = (
-        f"Top {len(agg)} {group_col.upper()} codes accounted for "
-        f"{agg['Cost Share (%)'].sum():.1f}% of all charges"
-        + (f" in {period}" if period else "")
-        + "."
+        f"Acrosss all claims, total charges were ${total_cost:,.0f}. "
+        f"The top {top_n} ICD/CPT codes charges accounted for {share_top:.1f}% of total cost, "
+        f"with {top_codes[0]} leading at {lead_share:.1f}%."
     )
+    
 
-    return {"summary": summary, "table_name": "top_cost_drivers", "table": agg}
+    return {
+        "summary": summary, 
+        "table_name": "top_cost_drivers", 
+        "table": top_df,
+        "next_steps": [
+            "Analyze high-cost procedures for potential efficiency improvements.",
+            "Review cost concentration trends by quarter and provider.",
+        ],
+        "citations": ["claim_df", "icd.csv"]
+    }     
 
 
 # ------------------------------
