@@ -138,7 +138,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
         msg = resp.choices[0].message
 
-         # 🧠 Auto-detect likely tool before explicit tool calls (fallback safety)
+        # 🧠 Auto-detect likely tool before explicit tool calls (fallback safety)
         try:
             auto_tool_result = _call_tool("", {}, df, user_q=user_q)
             if auto_tool_result and auto_tool_result.get("table"):
@@ -258,8 +258,8 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                                 "Cost Share (%)": row.get("Cost Share (%)"),
                             })
 
-                df_final = pd.DataFrame(final_rows).dropna(how="all").fillna("")
-                result_payload["tables"] = df_final.to_dict(orient="records")
+            df_final = pd.DataFrame(final_rows).dropna(how="all").fillna("")
+            result_payload["tables"] = df_final.to_dict(orient="records")
 
         # 3. Fallback if no tools invoked
         result_payload["summary"].append(msg.content or "No tools invoked.")
