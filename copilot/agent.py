@@ -185,28 +185,37 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 # ✅ Run the tool locally
                 tool_result = _call_tool(fn, args, df, user_q=user_q)
                 
-                # 🩹 Ensure a visible table even if tool didn't return one
+               # 🩹 Ensure a visible table even if tool didn't return one
                 try:
                     if isinstance(tool_result, dict):
-                        # If table missing, check for possible tabular data in other keys
-                        if not tool_result.get("table"):
+                        table_data = tool_result.get("table", None)
+
+                        # Normalize DataFrame → dict
+                        if isinstance(table_data, pd.DataFrame):
+                            tool_result["table"] = table_data.to_dict(orient="records")
+
+                        # If no valid table present, scan for potential table-like data
+                        elif not isinstance(table_data, list):
+                            detected = None
                             for key, val in tool_result.items():
                                 if isinstance(val, pd.DataFrame):
-                                    tool_result["table"] = val.to_dict(orient="records")
+                                    detected = val.to_dict(orient="records")
+                                    break
                                 elif isinstance(val, list) and val and isinstance(val[0], dict):
-                                    tool_result["table"] = val
+                                    detected = val
+                                    break
                                 elif isinstance(val, dict):
-                                    tool_result["table"] = [val]
+                                    detected = [val]
+                                    break
 
-                            # Fallback empty table placeholder
-                            if not tool_result.get("table"):
-                                tool_result["table"] = [{"message": "No table data returned by this function."}]
+                            # Fallback: no tabular data detected
+                            tool_result["table"] = detected or [{"message": "No table data returned by this function."}]
+
+                    elif isinstance(tool_result, pd.DataFrame):
+                        tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
                     else:
-                        # If the tool returned a DataFrame directly
-                        if isinstance(tool_result, pd.DataFrame):
-                            tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
-                        else:
-                            tool_result = {"summary": str(tool_result), "table": [{"message": "Unrecognized tool output."}]}
+                        tool_result = {"summary": str(tool_result), "table": [{"message": "Unrecognized tool output."}]}
+
                 except Exception as e:
                     st.warning(f"⚠️ Table normalization failed: {e}")
                     tool_result = {
