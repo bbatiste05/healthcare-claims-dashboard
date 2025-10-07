@@ -294,7 +294,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 final_rows = []
                 for row in clean_tables:
                     if isinstance(row, dict):
-                        quarter = row.get("Quarter") or row.get("quarter" or ""
+                        quarter = row.get("Quarter") or row.get("quarter") or ""
                         codes = row.get("Top ICD-10 Codes") or row.get("ICD10") or row.get("icd") or []
 
                         # Case: nested list of ICD dictionaries
@@ -313,15 +313,15 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                                         "ICD-10 Code": str(code_entry),
                                         "Total Cost": None,
                                         "Cost Share (%)": None,
-                                })
-                    else:
-                        # Single ICD entry already flattened
-                        final_rows.append({
-                            "Quarter": quarter,
-                            "ICD-10 Code": row.get("ICD-10 Code"),
-                            "Total Cost": row.get("Total Cost"),
-                            "Cost Share (%)": row.get("Cost Share (%)"),
-                        })
+                                    })
+                        else:
+                            # Single ICD entry already flattened
+                            final_rows.append({
+                                "Quarter": quarter,
+                                "ICD-10 Code": row.get("ICD-10 Code"),
+                                "Total Cost": row.get("Total Cost"),
+                                "Cost Share (%)": row.get("Cost Share (%)"),
+                            })
 
             # Clean out empty rows and replace None with blanks
             df_final = pd.DataFrame(final_rows)
