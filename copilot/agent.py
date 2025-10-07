@@ -235,10 +235,13 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 try:
                     parsed = json.loads(final_answer)
                     for k in result_payload.keys():
-                        if isinstance(parsed.get(k), str):
-                            result_payload[k] = [parsed.get(k)]
-                        else:
-                            result_payload[k] = parsed.get(k, result_payload[k])
+                        if k in parsed:
+                            if isinstance(parsed[k], str):
+                                result_payload[k] = [parsed[k]]
+                            elif isinstance(parsed[k], list):
+                                result_payload[k].extend(parsed[k])
+                            else:
+                                result_payload[k] = parsed[k]
                 except Exception:
                     result_payload["summary"].append(final_answer)
 
