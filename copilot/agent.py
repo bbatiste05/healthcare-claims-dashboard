@@ -350,6 +350,36 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                     result_payload["tables"] = tool_result["table"]
                 elif isinstance(result_payload["tables"], list) and isinstance(tool_result["table"], list):
                     result_payload["tables"].extend(tool_result["table"])
+
+        # 🧠 If GPT didn’t call any tool but query clearly matches a known intent → run manually
+        if not msg.tool_calls and not auto_detected:
+            user_q_lower = user_q.lower()
+            st.info("⚡ No GPT tool call detected — attempting auto-fallback match.")
+            if any(k in user_q_lower for k in ["cost", "charge", "cpt", "icd"]):
+                tool_result = _call_tool("top_icd_cpt_cost", {}, df, user_q=user_q)
+                auto_detected = True
+            elif any(k in user_q_lower for k in ["provider", "outlier", "anomaly", "quarter"]):
+                tool_result = _call_tool("provider_anomalies", {}, df, user_q=user_q)
+                auto_detected = True
+            elif any(k in user_q_lower for k in ["fraud", "claims per patient", "flag"]):
+                tool_result = _call_tool("fraud_flags", {}, df, user_q=user_q)
+                auto_detected = True
+            elif any(k in user_q_lower for k in ["risk", "cohort", "patient risk"]):
+                tool_result = _call_tool("risk_scoring", {}, df, user_q=user_q)
+                auto_detected = True
+
+            if auto_detected:
+                st.success(f"✅ Auto-ran tool based on query intent: {list(tool_result.keys())}")
+
+                if isinstance(tool_result, pd.DataFrame):
+                    tool_result = {
+                        "summary": "Auto-detected DataFrame result",
+                        "table": tool_result.to_dict(orient="records")
+                    }
+
+                result_payload["summary"].append(tool_result.get("summary", "Tool executed automatically."))
+                result_payload["tables"] = tool_result.get("table", [])
+                return result_payload
                                                                           
 
         # 3. Fallback if no tools invoked
