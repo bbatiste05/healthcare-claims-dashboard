@@ -184,6 +184,20 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
                 # ✅ Run the tool locally
                 tool_result = _call_tool(fn, args, df, user_q=user_q)
+                 # 🩹 Ensure a visible table even if tool didn't return one
+                if not tool_result.get("table"):
+                    # Look for other data-like keys
+                    for key, val in tool_result.items():
+                        if isinstance(val, pd.DataFrame):
+                            tool_result["table"] = val.to_dict(orient="records")
+                        elif isinstance(val, list) and val and isinstance(val[0], dict):
+                            tool_result["table"] = val
+                        elif isinstance(val, dict):
+                            tool_result["table"] = [val]
+
+            # If still empty, show a diagnostic message
+            if not tool_result.get("table"):
+                tool_result["table"] = [{"message": "No table data returned by this function."}]
 
                 # ✅ Normalize tool_result into valid JSON for GPT
                 if isinstance(tool_result, dict):
