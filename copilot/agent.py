@@ -259,54 +259,58 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 except Exception:
                     result_payload["summary"].append(final_answer)
 
-            # ✅ Normalize nested lists inside tables
-            if "tables" in result_payload:
-                clean_tables = []
-                
-                for t in result_payload["tables"]:
-                    # Case 1: If table is a stringified list of dicts
-                    if isinstance(t, str):
-                        try:
-                            parsed = json.loads(t.replace("'", '"'))
-                            if isinstance(parsed, list):
-                                clean_tables.extend(parsed)
-                            elif isinstance(parsed, dict):
-                                clean_tables.append(parsed)
-                            else:
-                                clean_table.append({"Raw": str(parsed)})
-                        except Exception:
-                            clean_tables.append({"Raw": t})
+            # ✅ Normalize nested tables into a flat, readable structure
+if "tables" in result_payload:
+    clean_tables = []
 
-                    # Case 2: Already a list of dicts
-                    elif isinstance(t, list):
-                        for row in t:
-                            if isinsatnce(row,dict):
-                                clean_tables.append(row)
-                    else:
-                        clean_tables.append({"Value": str(row)})
+    for t in result_payload["tables"]:
+        # Case 1: If table is a stringified list of dicts
+        if isinstance(t, str):
+            try:
+                parsed = json.loads(t.replace("'", '"'))
+                if isinstance(parsed, list):
+                    clean_tables.extend(parsed)
+                elif isinstance(parsed, dict):
+                    clean_tables.append(parsed)
+                else:
+                    clean_tables.append({"Raw": str(parsed)})
+            except Exception:
+                clean_tables.append({"Raw": t})
 
-            elif isinstance(t, dict):
-                clean_tables.append(t)
+        # Case 2: Already a list of dicts
+        elif isinstance(t, list):
+            for row in t:
+                if isinstance(row, dict):
+                    clean_tables.append(row)
+                else:
+                    clean_tables.append({"Value": str(row)})
 
-        # Optional: if quarters detected inside list, flatten that too
-        # e.g. [{"Quarter": "Q1 2024", "Top ICD-10 Codes": [...]}, ...]
-        final_rows = []
-        for row in clean_tables:
-            if isinstance(row, dict):
-                for key, val in row.items():
-                    if isinstance(val, list):
-                        # Expand nested ICD or CPT code lists into separate rows
-                        for sub in val:
-                            if isinstance(sub, dict):
-                                sub["Quarter"] = row.get("Quarter", "")
-                                final_rows.append(sub)
-                            else:
-                                final_rows.append({"Quarter": row.get("Quarter", ""), "Value": str(sub)})
-                    else:
-                        final_rows.append(row)     
+        # Case 3: Single dict
+        elif isinstance(t, dict):
+            clean_tables.append(t)
 
-                result_payload["tables"] = final_rows
-                return result_payload
+    # Optional: if quarters detected inside list, flatten that too
+    # e.g. [{"Quarter": "Q1 2024", "Top ICD-10 Codes": [...]}, ...]
+    final_rows = []
+    for row in clean_tables:
+        if isinstance(row, dict):
+            for key, val in row.items():
+                if isinstance(val, list):
+                    # Expand nested ICD or CPT code lists into separate rows
+                    for sub in val:
+                        if isinstance(sub, dict):
+                            sub["Quarter"] = row.get("Quarter", "")
+                            final_rows.append(sub)
+                        else:
+                            final_rows.append({
+                                "Quarter": row.get("Quarter", ""),
+                                "Value": str(sub)
+                            })
+                else:
+                    final_rows.append(row)
+
+    result_payload["tables"] = final_rows
+
 
         # 3. Fallback if no tools invoked
         result_payload["summary"].append(msg.content or "No tools invoked.")
