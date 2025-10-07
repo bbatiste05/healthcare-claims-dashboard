@@ -21,76 +21,80 @@ def _require_cols(df: pd.DataFrame, cols):
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-@_safe_run
-def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10, **kwargs):
-    """
-    Identify top ICD or CPT codes by total charge amount.
-    Handles flexible filters and period slicing (e.g., Q1, Q2 2024).
-    """
+@_safe_run        
+def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10):
+    # ✅ Flexible column name mapping
+    df = df.copy()
+    df.columns = df.columns.str.lower().str.strip()
 
-    required = ["charge_amount"]
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        return {"summary": f"Missing required columns: {missing}", "table": []}
+    # Try to normalize key column names
+    if 'service_date' not in df.columns:
+        for alt in ['claim_date', 'date_of_service', 'dos']:
+            if alt in df.columns:
+                df.rename(columns={alt: 'service_date'}, inplace=True)
+                break
 
-    d = df.copy()
-    d["charge_amount"] = pd.to_numeric(d["charge_amount"], errors="coerce")
+    # Same for charge_amount
+    if 'charge_amount' not in df.columns:
+        for alt in ['billed_amount', 'total_charge', 'amount']:
+            if alt in df.columns:
+                df.rename(columns={alt: 'charge_amount'}, inplace=True)
+                break
 
-    # --- Normalize time filters if period is specified ---
-    if "service_date" in d.columns or "claim_date" in d.columns:
-        date_col = "service_date" if "service_date" in d.columns else "claim_date"
-        d[date_col] = pd.to_datetime(d[date_col], errors="coerce")
+    # Final validation
+    _require_cols(df, ["charge_amount", "service_date"])
 
-        if period and "q" in period.lower():
-            qmap = {"q1": (1, 3), "q2": (4, 6), "q3": (7, 9), "q4": (10, 12)}
-            for q, (start, end) in qmap.items():
-                if q in period.lower():
-                    d = d[d[date_col].dt.month.between(start, end)]
-
-    # --- Determine which code column to use ---
-    code_col = None
-    if "cpt" in d.columns and (cpt or "cpt" in str(icd or "").lower()):
-        code_col = "cpt"
-    elif "icd10" in d.columns:
-        code_col = "icd10"
-
-    if not code_col:
-        return {"summary": "No ICD or CPT columns found in dataset.", "table": []}
-
-    # --- Aggregate and rank ---
-    agg = (
-        d.groupby(code_col)["charge_amount"]
-        .sum()
-        .reset_index()
-        .rename(columns={code_col: "Code", "charge_amount": "Total Cost"})
-        .sort_values("Total Cost", ascending=False)
-        .head(top_n)
-    )
-    total_cost = agg["Total Cost"].sum()
-    agg["Cost Share (%)"] = ((agg["Total Cost"] / total_cost) * 100).round(2)
+    # ✅ Main logic
+    if icd:
+        group_field = "icd10"
+    elif cpt:
+        group_field = "cpt"
+    else:
+        # fallback: auto-detect ICD vs CPT columns
+        if "icd10" in df.columns:
+            group_field = "icd10"
+        elif "cpt" in df.columns:
+            group_field = "cpt"
+        else:
+            raise ValueError("No ICD or CPT code columns found.")
 
     summary = (
-        f"Top {len(agg)} {code_col.upper()} codes driving cost in "
-        f"{period or 'the dataset'} represent {agg['Cost Share (%)'].sum():.1f}% of total charges."
+        df.groupby(group_field)["charge_amount"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(top_n)
+        .reset_index()
     )
 
-    return {"summary": summary, "table_name": "top_cost_codes", "table": agg.to_dict(orient="records")}
+    summary.columns = [group_field.upper(), "Total Cost"]
+    summary["Cost Share (%)"] = (
+        (summary["Total Cost"] / summary["Total Cost"].sum()) * 100
+    ).round(2)
+
+    return {"table_name": "cost_drivers", "table": summary}
 
 
 
 
 
-
+@_safe_run 
 @_safe_run
 def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, period=None, **kwargs):
     """
+    Detect anomalies
+    - If 'period' is given with 'compare' (e.g. '2024Q1_vs_2024Q2'), compares quarters.
+    - Otherwise computes z-score outliers for total or mean charges.
     Detect anomalies in provider billing patterns or compare quarters.
     """
+    
 
     # --- 1️⃣ Validate columns ---
     required = ["provider_id", "charge_amount"]
     missing = [c for c in required if c not in df.columns]
     if missing:
+       raise ValueError(f"Missing required columns: {missing}") 
+    
+                
         raise ValueError(f"Missing required columns: {missing}")
 
     d = df.copy()
@@ -102,10 +106,15 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
         .astype(str)
         .str.replace(r"[^0-9.\-]", "", regex=True)
         .replace("", pd.NA)
+    
+
+        
+    d["charge_amount"] = pd.to_numeric(d["charge_amount"], error="coerce")
     )
     d["charge_amount"] = pd.to_numeric(d["charge_amount"], errors="coerce")
     d.dropna(subset=["charge_amount", "provider_id"], inplace=True)
 
+     # --- 3️⃣ Flexible date parsing ---
     # --- 3️⃣ Flexible date parsing ---
     date_candidates = ["claim_date", "service_date", "date_of_service", "transaction_date"]
     found_date_col = next((c for c in date_candidates if c in d.columns), None)
@@ -126,6 +135,8 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 "table_name": "provider_quarter_comparison",
                 "table": [],
             }
+    
+   # --- Optional filter by code (ICD or CPT) ---
 
     # --- 4️⃣ Optional filter by code ---
     if code:
@@ -133,14 +144,19 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
             if c in d.columns:
                 d = d[d[c].astype(str) == str(code)]
 
+    # --- Detect comparison type ---
     # --- 5️⃣ Quarter comparison logic ---
     if period and "_vs_" in str(period):
+        
+        # Compare between two quarters (e.g., '2024Q1_vs_2024Q2')
         try:
             q1, q2 = period.split("_vs_")
             qmap = {"Q1": (1, 3), "Q2": (4, 6), "Q3": (7, 9), "Q4": (10, 12)}
 
+            # Extract year and quarter safely
             d["year"] = d["claim_date"].dt.year
             d["month"] = d["claim_date"].dt.month
+            d["quarter"] = d["month"].apply(lambda m: next((q for q, (start, end) in qmap.items() if start <= m <= end), None))
             d["quarter"] = d["month"].apply(
                 lambda m: next((q for q, (start, end) in qmap.items() if start <= m <= end), None)
             )
@@ -156,9 +172,13 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 pivot["Δ_Charge"] = pivot[q2] - pivot[q1]
                 pivot["Δ_%"] = ((pivot[q2] - pivot[q1]) / pivot[q1].replace(0, pd.NA)) * 100
                 pivot = pivot.reset_index()
+                pivot["Flagged"] = pivot["Δ_%"].abs() >= 20  # Flag ≥20% change
                 pivot["Flagged"] = pivot["Δ_%"].abs() >= 20
 
                 summary = (
+                    f"Compared provider billing anomalies between {q1} and {q2}. "
+                    f"{(pivot['Flagged']).sum()} providers showed ≥20% change in charges."
+                )    
                     f"Compared provider billing between {q1} and {q2}. "
                     f"{pivot['Flagged'].sum()} providers showed ≥20% change. "
                     f"Sample size: {len(pivot)} providers."
@@ -171,10 +191,12 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 }
             else:
                 return {
+                    "summary": f"Could not find both {q1} and {q2} data columns for comparison.",
                     "summary": f"Could not find both {q1} and {q2} columns for comparison. "
                                f"Available: {list(pivot.columns)}",
                     "table_name": "provider_quarter_comparison",
                     "table": [],
+                }    
                 }
 
         except Exception as e:
@@ -184,6 +206,7 @@ def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=1.5, p
                 "table": [],
             }
 
+    # --- Default z-score anomaly detection ---
     # --- 6️⃣ Default z-score anomaly detection ---
     agg = d.groupby("provider_id")["charge_amount"].sum().to_frame("total_charge")
     mu, sigma = agg["total_charge"].mean(), agg["total_charge"].std(ddof=0)
@@ -244,11 +267,9 @@ def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90, **k
 
 
 @_safe_run 
-def risk_scoring(df: pd.DataFrame, cohort: str = None, user_q: str = "", top_n: int = 10, **kwargs):
+def risk_scoring(df: pd.DataFrame, cohort: str = None, **kwargs):
     """
-    Compute a synthetic risk score for each patient or analyze wait days depending on user question.
-    - If user asks about 'risk', calculate risk scores.
-    - If user asks about 'wait days' or 'wait times', compute wait time metrics
+    Compute a synthetic risk score for each patient.
     - Uses available fields like charge_amount, num_procedures, and wait_days.
     - Optionally filters to a specific cohort (e.g., 'cardiology').
     """
@@ -262,96 +283,42 @@ def risk_scoring(df: pd.DataFrame, cohort: str = None, user_q: str = "", top_n: 
         }
 
     d = df.copy()
-    user_q_lower = (user_q or "").lower()
 
-    if cohort and "icd10" in d.columns:
-        if cohort.lower() == "cardiology":
-            d = d[d["icd10"].str.startswith("I", na=False)]
-        else:
-            d = d[d["icd10"].str.contains(cohort, case=False, na=False)]
+    # --- Generate a synthetic risk score ---
+    # Normalize and weight common claim factors
+    d["risk_score"] = (
+        0.6 * (d["charge_amount"] / d["charge_amount"].max()) +
+        0.3 * (d["num_procedures"] / d["num_procedures"].max()) +
+        0.1 * (d["wait_days"] / (d["wait_days"].max() if d["wait_days"].max() != 0 else 1))
+    ).round(3)
 
-    # ===== Generate a synthetic risk score ======
-    # Mode 1: Risk Scoring 
-    # ==============================
-    if "risk" in user_q_lower or "score" in user_q_lower:
-        d["risk_score"] = (
-            0.6 * (d["charge_amount"] / d["charge_amount"].max()) +
-            0.3 * (d["num_procedures"] / d["num_procedures"].max()) +
-            0.1 * (d["wait_days"] / (d["wait_days"].max() if d["wait_days"].max() != 0 else 1))
-        ).round(3)
+    if cohort and cohort.lower() == "cardiology":
+        d = d[d["icd10"].str.startswith("I", na=False)]  # I00–I99 range = circulatory system
 
-
-        # --- Aggregate by patient ---
-        agg = (
-            d.groupby("patient_id")["risk_score"]
-            .mean()
-            .reset_index()
-            .rename(columns={"risk_score": "avg_risk_score"})
-            .sort_values("avg_risk_score", ascending=False)
-        )
-
-        # --- Compute overall stats ---
-        top_patients = agg.head(top_n)
-        avg_risk = round(agg["avg_risk_score"].mean(), 3)
-        summary = (
-            f"Top {top_n} highest-risk patients have average risk score from "
-            f"{top_patients['avg_risk_score'].min():.3f} to {top_patients['avg_risk_score'].max():.3f}, "
-            f"compared to cohort mean of {avg_risk}."
-        )
+    if d.empty:
         return {
-            "summary": summary,
-            "table_name": "patient_risk_scores",
-            "table": top_patients.to_dict(orient="recors"),
-            "next_steps": [
-                "Review ICD and demographic data for top-risk patients.",
-                "Coordinate care management interventions for scores above 3.0.",
-                "Recalculate risk monthly using updated clinical and claims data."
-            ],
-            "citations": ["patient_risk_scors"]
+            "summary": f"No patients matched the cohort '{cohort}', so average patient risk scores could not be calculated.",
+            "table": []
         }
 
-    # =================================================
-    # Mode 2: Wait time / delays analysis path
-    # =================================================
-    elif "wait" in user_q_lower or "delay" in user_q_lower or "time to" in user_q_lower:
-        # Computer wait-day stats per patient or ICD
-        group_cols = ["patient_id"]
-        if "icd10" in d.columns and ("icd" in user_q_lower or "by icd" in user_q_lower):
-            group_cols.append("icd10")
+    # --- Aggregate by patient ---
+    agg = (
+        d.groupby("patient_id")["risk_score"]
+        .mean()
+        .reset_index()
+        .rename(columns={"risk_score": "avg_risk_score"})
+    )
 
-        agg_wait = (
-            d.groupby(group_cols)["wait_days"]
-            .agg(["mean", "median", "max"])
-            .reset_index()
-            .rename(columns={"mean": "avg_wait_days", "median": "median_wait_days", "max": "max_wait_days"})
-            .sort_values("avg_wait_days", ascending=False)
-        )
+    # --- Compute overall stats ---
+    avg_risk = round(agg["avg_risk_score"].mean(), 3)
+    summary = (
+        f"Average risk score across {len(agg)} patients"
+        + (f" in the '{cohort}' cohort" if cohort else "")
+        + f" is {avg_risk}."
+    )
 
-        top_waits = agg_wait.head(top_n)
-        summary = (
-            f"Top {top_n} patients (or ICD codes) show average wait times "
-            f"ranging from {top_waits['avg_wait_days'].min():.1f} to {top_waits['avg_wait_days'].max():.1f} days."
-        )
-
-
-        return {
-            "summary": summary,
-            "table_name": "wait_time_analysis",
-            "table": top_waits.to_dict(orient="records"),
-            "next_steps": [
-                "Investigate scheduling and referral processes for long waits.",
-                "Correlate high wait times with cost and outcomes.",
-                "Implement interventions for reducing delays in high-wait cohorts."
-            ],
-            "citations": ["claims_wait-times"]
-        }
-
-# =======================
-# Fallback
-# =======================
-    else:
-        return {
-            "summary": "No clear intent detected (risk or wait times). Please refine your question.",
-            "table_name": None,
-            "table":[]
-        }    
+    return {
+        "summary": summary,
+        "table_name": "patient_risk_scores",
+        "table": agg.head(10).to_dict(orient="records")
+    }
