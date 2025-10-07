@@ -175,7 +175,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                     fn = tc.function.name
                     args = json.loads(tc.function.arguments or "{}")
                     auto_tool_result = _call_tool(fn, args, df, user_q=user_q)
-                    st.write(" tool_result preview:", tool_result)
+                    st.write(" tool_result preview:", auto_tool_result)
                     auto_detected = True
                     st.info(f"🧠 Tool invoked by GPT: {fn}")
 
@@ -254,6 +254,21 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                         final_rows.append(row)
 
             result_payload["tables"] = pd.DataFrame(final_rows).replace({None: ""}).to_dict(orient="records")
+
+        # 🧩 Clean up CPT/ICD column names for consistency
+if "tables" in result_payload and result_payload["tables"]:
+    clean_df = pd.DataFrame(result_payload["tables"])
+    rename_map = {
+        "cpt": "CPT Code",
+        "CPT": "CPT Code",
+        "icd10": "ICD-10 Code",
+        "ICD10": "ICD-10 Code",
+        "charge_amount": "Total Cost",
+        "total_cost": "Total Cost",
+    }
+    clean_df.rename(columns={k: v for k, v in rename_map.items() if k in clean_df.columns}, inplace=True)
+    result_payload["tables"] = clean_df.to_dict(orient="records")
+
 
         return result_payload
 
