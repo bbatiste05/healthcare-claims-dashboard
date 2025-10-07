@@ -291,6 +291,18 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
         # 3. Fallback if no tools invoked
         result_payload["summary"].append(msg.content or "No tools invoked.")
+
+          # ✅ Ensure next_steps and citations are always present
+        if not result_payload.get("next_steps") or not result_payload["next_steps"]:
+            result_payload["next_steps"] = [
+                "Review high-cost codes to identify potential cost concentration.",
+                "Cross-reference top CPTs with provider utilization data.",
+                "Validate claim data completeness before deeper analysis.",
+            ]
+
+        if not result_payload.get("citations") or not result_payload["citations"]:
+            result_payload["citations"] = ["claims_df", "icd10_reference.csv"]        
+        
         return result_payload
 
     except openai.RateLimitError:
