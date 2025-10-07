@@ -302,6 +302,14 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 except Exception:
                     pass
 
+            # ✅ Force reattach any parsed table results before returning
+            if "table" in locals() and isinstance(tool_result, dict) and tool_result.get("table"):
+                if not result_payload.get("tables"):
+                    result_payload["tables"] = tool_result["table"]
+                elif isinstance(result_payload["tables"], list) and isinstance(tool_result["table"], list):
+                    result_payload["tables"].extend(tool_result["table"])
+                                                                          
+
         # 3. Fallback if no tools invoked
         if not result_payload["summary"]:
             result_payload["summary"].append(msg.content or "No tools invoked.")
