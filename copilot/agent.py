@@ -138,20 +138,23 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
         msg = resp.choices[0].message
 
+        auto_tool_result = None
+        auto_detected = False
+
         # 🧠 Auto-detect likely tool before explicit tool calls (fallback safety)
         try:
             auto_tool_result = _call_tool("", {}, df, user_q=user_q)
-            if auto_tool_result and auto_tool_result.get("table"):
-                st.write("🔍 Auto-detected tool execution based on query intent.")
-                return {
-                    "summary": [auto_tool_result.get("summary", "Auto-detected tool executed successfully.")],
-                    "tables": auto_tool_result.get("table", []),
-                    "figures": [],
-                    "citations": [],
-                    "next_steps": ["Auto tool triggered before GPT tool_calls."]
-                }
+            if isinstance(auto_tool_result, dict):
+                summary_text = str(auto_tool_result.get("summary", "")).lower()
+                if "no matching" not in summary_text:
+                    auto_detected = True
+            elif isinstance(auto_tool_result, pd.DataFrame) and not auto_tool_result.empty:
+                auto_detected = True
+                
         except Exception as e:
             st.warning(f"Auto-detect fallback failed: {e}")
+
+        st.info(f"Auto-detect: using {_call_tool.__name__ if auto_detected else 'GPT tool selection'}")
 
 
         # 2. If GPT requested a tool → run locally
