@@ -65,27 +65,36 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=Non
     agg["Cost Share (%)"] = (agg["charge_amount"] / agg["charge_amount"].sum() * 100).round(2)
     agg.rename(columns={group_col: group_col.upper(), "charge_amount": "Total Cost"}, inplace=True)
 
-    total_cost = agg["charge_amount"].sum()
+   # --- Compute summary metrics ---
+    try:
+        total_cost = agg["Total Cost"].sum()
+        top_cost = agg["Total Cost"].head(top_n).sum()
+        share_top = (top_cost / total_cost * 100) if total_cost > 0 else 0
 
-    summary = (
-        f"Acrosss all claims, total charges were ${total_cost:,.0f}. "
-        f"The top {top_n} ICD/CPT codes charges accounted for {share_top:.1f}% of total cost, "
-        f"with {top_codes[0]} leading at {lead_share:.1f}%."
-    )
-    
+        # handle both ICD and CPT cases gracefully
+        code_col = "ICD-10 Code" if "ICD-10 Code" in agg.columns else "CPT"
+        top_codes = agg[code_col].head(top_n).tolist() if code_col in agg.columns else []
+        lead_share = agg["Cost Share (%)"].iloc[0] if not agg.empty else 0
 
+        summary = (
+            f"Across all claims, total charges were ${total_cost:,.0f}. "
+            f"The top {top_n} {code_col} codes accounted for {share_top:.1f}% of total cost, "
+            f"with {top_codes[0] if top_codes else 'N/A'} leading at {lead_share:.1f}%."
+        )
+    except Exception as e:
+        summary = f"Unable to compute summary metrics due to data issue: {e}"
+
+    # --- Return structured output ---
     return {
-        "summary": summary, 
-        "table_name": "top_cost_drivers", 
-        "table": top_df,
+        "summary": summary,
+        "table_name": "top_cost_drivers",
+        "table": agg.to_dict(orient="records"),
         "next_steps": [
             "Analyze high-cost procedures for potential efficiency improvements.",
-            "Review cost concentration trends by quarter and provider.",
+            "Review cost concentration trends by quarter and provider."
         ],
         "citations": ["claim_df", "icd.csv"]
-    }     
-
-
+    }    
 # ------------------------------
 # 2️⃣ PROVIDER ANOMALIES TOOL
 # ------------------------------
