@@ -21,57 +21,61 @@ def _require_cols(df: pd.DataFrame, cols):
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-@_safe_run        
-def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10):
-    # ✅ Flexible column name mapping
-    df = df.copy()
-    df.columns = df.columns.str.lower().str.strip()
+@_safe_run
+def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10, **kwargs):
+    """
+    Identify top ICD or CPT codes by total charge amount.
+    Handles flexible filters and period slicing (e.g., Q1, Q2 2024).
+    """
 
-    # Try to normalize key column names
-    if 'service_date' not in df.columns:
-        for alt in ['claim_date', 'date_of_service', 'dos']:
-            if alt in df.columns:
-                df.rename(columns={alt: 'service_date'}, inplace=True)
-                break
+    required = ["charge_amount"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        return {"summary": f"Missing required columns: {missing}", "table": []}
 
-    # Same for charge_amount
-    if 'charge_amount' not in df.columns:
-        for alt in ['billed_amount', 'total_charge', 'amount']:
-            if alt in df.columns:
-                df.rename(columns={alt: 'charge_amount'}, inplace=True)
-                break
+    d = df.copy()
+    d["charge_amount"] = pd.to_numeric(d["charge_amount"], errors="coerce")
 
-    # Final validation
-    _require_cols(df, ["charge_amount", "service_date"])
+    # --- Normalize time filters if period is specified ---
+    if "service_date" in d.columns or "claim_date" in d.columns:
+        date_col = "service_date" if "service_date" in d.columns else "claim_date"
+        d[date_col] = pd.to_datetime(d[date_col], errors="coerce")
 
-    # ✅ Main logic
-    if icd:
-        group_field = "icd10"
-    elif cpt:
-        group_field = "cpt"
-    else:
-        # fallback: auto-detect ICD vs CPT columns
-        if "icd10" in df.columns:
-            group_field = "icd10"
-        elif "cpt" in df.columns:
-            group_field = "cpt"
-        else:
-            raise ValueError("No ICD or CPT code columns found.")
+        if period and "q" in period.lower():
+            qmap = {"q1": (1, 3), "q2": (4, 6), "q3": (7, 9), "q4": (10, 12)}
+            for q, (start, end) in qmap.items():
+                if q in period.lower():
+                    d = d[d[date_col].dt.month.between(start, end)]
+
+    # --- Determine which code column to use ---
+    code_col = None
+    if "cpt" in d.columns and (cpt or "cpt" in str(icd or "").lower()):
+        code_col = "cpt"
+    elif "icd10" in d.columns:
+        code_col = "icd10"
+
+    if not code_col:
+        return {"summary": "No ICD or CPT columns found in dataset.", "table": []}
+
+    # --- Aggregate and rank ---
+    agg = (
+        d.groupby(code_col)["charge_amount"]
+        .sum()
+        .reset_index()
+        .rename(columns={code_col: "Code", "charge_amount": "Total Cost"})
+        .sort_values("Total Cost", ascending=False)
+        .head(top_n)
+    )
+    total_cost = agg["Total Cost"].sum()
+    agg["Cost Share (%)"] = ((agg["Total Cost"] / total_cost) * 100).round(2)
 
     summary = (
-        df.groupby(group_field)["charge_amount"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(top_n)
-        .reset_index()
+        f"Top {len(agg)} {code_col.upper()} codes driving cost in "
+        f"{period or 'the dataset'} represent {agg['Cost Share (%)'].sum():.1f}% of total charges."
     )
 
-    summary.columns = [group_field.upper(), "Total Cost"]
-    summary["Cost Share (%)"] = (
-        (summary["Total Cost"] / summary["Total Cost"].sum()) * 100
-    ).round(2)
+    return {"summary": summary, "table_name": "top_cost_codes", "table": agg.to_dict(orient="records")}
 
-    return {"table_name": "cost_drivers", "table": summary}
 
 
 
