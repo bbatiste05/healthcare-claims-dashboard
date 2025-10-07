@@ -214,8 +214,11 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                     {
                         "role": "user",
                         "content": (
-                            "Format the final answer as valid JSON with keys: "
-                            "summary, tables, figures, citations, next_steps. "
+                            "Format the final answer as valid JSON with keys: summary, tables, figures, citations, next_steps. "
+                            "Maintain tone and structure of the Healthcare Claims CoPilot (use clinical reasoning and clear numeric summaries). "
+                            "Include 1-2 key insights (e.g., which ICD/CPTcodes dominate cost, anomaly trends, or risk patterns) and quantify results. "
+                            "Include 2-3 recommend next_steps that guide further analysis or compliance action. "
+                            "Always include citations referencing data sources used (e.g., 'claims_df', 'icd.csv', 'nppes.csv'). "
                             "Ensure JSON syntax is correct, concise, and under 2000 tokens."
                         ),
                     },
