@@ -240,9 +240,11 @@ def fraud_flags(df: pd.DataFrame, min_claims_per_patient=10, window_days=90, **k
 
 
 @_safe_run 
-def risk_scoring(df: pd.DataFrame, cohort: str = None, **kwargs):
+def risk_scoring(df: pd.DataFrame, cohort: str = None, user_q: str = "", top_n: int = 10, **kwargs):
     """
-    Compute a synthetic risk score for each patient.
+    Compute a synthetic risk score for each patient or analyze wait days depending on user question.
+    - If user asks about 'risk', calculate risk scores.
+    - If user asks about 'wait days' or 'wait times', compute wait time metrics
     - Uses available fields like charge_amount, num_procedures, and wait_days.
     - Optionally filters to a specific cohort (e.g., 'cardiology').
     """
@@ -256,23 +258,24 @@ def risk_scoring(df: pd.DataFrame, cohort: str = None, **kwargs):
         }
 
     d = df.copy()
+    user_q_lower = (user_q or "").lower
+
+    if cohort and "icd10" in d.columns:
+        if cohort.lower() == "cardiology":
+            d = d[d["idcd10"].str.startswith("I", na=False)]
+        else:
+            d = d[d["icd10"].str.contains(cohort, case=False, na=False)]
 
     # --- Generate a synthetic risk score ---
-    # Normalize and weight common claim factors
-    d["risk_score"] = (
-        0.6 * (d["charge_amount"] / d["charge_amount"].max()) +
-        0.3 * (d["num_procedures"] / d["num_procedures"].max()) +
-        0.1 * (d["wait_days"] / (d["wait_days"].max() if d["wait_days"].max() != 0 else 1))
-    ).round(3)
+    # Mode 1: Risk Scoring 
+    # -------- #
+    if "risk" in user_q_lower or "score" in user_q_lower:
+        d["risk_score"] = (
+            0.6 * (d["charge_amount"] / d["charge_amount"].max()) +
+            0.3 * (d["num_procedures"] / d["num_procedures"].max()) +
+            0.1 * (d["wait_days"] / (d["wait_days"].max() if d["wait_days"].max() != 0 else 1))
+        ).round(3)
 
-    if cohort and cohort.lower() == "cardiology":
-        d = d[d["icd10"].str.startswith("I", na=False)]  # I00–I99 range = circulatory system
-
-    if d.empty:
-        return {
-            "summary": f"No patients matched the cohort '{cohort}', so average patient risk scores could not be calculated.",
-            "table": []
-        }
 
     # --- Aggregate by patient ---
     agg = (
@@ -280,18 +283,70 @@ def risk_scoring(df: pd.DataFrame, cohort: str = None, **kwargs):
         .mean()
         .reset_index()
         .rename(columns={"risk_score": "avg_risk_score"})
+        .sort_values("avg_risk_score", ascending=False)
     )
 
     # --- Compute overall stats ---
+    top_patients = agg.head(top_n)
     avg_risk = round(agg["avg_risk_score"].mean(), 3)
     summary = (
-        f"Average risk score across {len(agg)} patients"
-        + (f" in the '{cohort}' cohort" if cohort else "")
-        + f" is {avg_risk}."
-    )
+        f"Top {top_n} highest-risk patients have average risk score from "
+        f"{top_patients['avg_risk_score'].min():.3f} to {top_patients['avg_risk_score'].max():.3f}, "
+        f"compared to cohort mean of {avg_risk}."
 
     return {
         "summary": summary,
         "table_name": "patient_risk_scores",
-        "table": agg.head(10).to_dict(orient="records")
+        "table": top_patients.to_dict(orient="recors"),
+        "next_steps": [
+            "Review ICD and demographic data for top-risk patients.",
+            "Coordinate care management interventions for scores above 3.0.",
+            "Recalculate risk monthly using updated clinical and claims data."
+        ],
+        "citations": ["patient_risk_scors"]
     }
+
+# ===========================================
+# Mode 2: Wait time / delays analysis path
+# ===========================================
+elif "wait" in user_q_lower or "delay" in user_q_lower or "time to" in user_q_lower:
+    group_cols = ["patient_id"]
+    if "icd10" in d.columns and ("icd" in user_q_lower or "by icd" in user_q_lower):
+        group_cols.append("icd10")
+
+    agg_wait = (
+        d.groupby(group_cols)["wait_days"]
+        .agg(["mean", "median", "max"])
+        .reset_index()
+        .rename(columns={"mean": "avg_wait_days", "median": "median_wait_days", "max": "max_wait_days"})
+        .sort_values("avg_wait_days", ascending=False)
+    )
+
+    top_waits = agg_wait.head(top_n)
+    summary = (
+        f"Top {top_n} patients (or ICD codes) show average wait times "
+        f"ranging from {top_waits['avg_wait_days'].min():.1f} to {top_waits['avg_wait_days'].max():.1f} days."
+    )
+
+
+    return {
+        "summary": summary,
+        "table_name": "wait_time_analysis",
+        "table": top_waits.to_dict(orient="records"),
+        "next_steps": [
+            "Investigate scheduling and referral processes for long waits.",
+            "Correlate high wait times with cost and outcomes.",
+            "Implement interventions for reducing delays in high-wait cohorts."
+        ],
+        "citations": ["claims_wait-times"]
+    }
+
+# =======================
+# Fallback
+# =======================
+else:
+    return {
+        "summary": "No clear intent detected (risk or wait times). Please refine your question.",
+        "table_name": None,
+        "table":[]
+    }    
