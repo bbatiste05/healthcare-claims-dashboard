@@ -289,6 +289,19 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             df_final = pd.DataFrame(final_rows).dropna(how="all").fillna("")
             result_payload["tables"] = df_final.to_dict(orient="records")
 
+            # ✅ Ensure tables are preserved before fallback or overwrite
+            if "tables" not in result_payload or not result_payload["tables"]:
+                result_payload["tables"] = df_final.to_dict(orient="records")
+
+            # ✅ If DataFrame accidentally serialized as string, fix it
+            elif isinstance(result_payload["tables"], str):
+                try:
+                    parsed_table = json.loads(result_payload["tables"].replace("'", '"'))
+                    if isinstance(parsed_table, list):
+                        result_payload["tables"] = parsed_table
+                except Exception:
+                    pass
+
         # 3. Fallback if no tools invoked
         if not result_payload["summary"]:
             result_payload["summary"].append(msg.content or "No tools invoked.")
