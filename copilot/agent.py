@@ -68,15 +68,11 @@ def _tools_schema() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "risk_scoring",
-                "description": (
-                    "Compute patient risk scores or analyze wait times by ICD, cohort, or patient. "
-                    "Handles questions mentioning 'risk', 'wait', 'delay', 'ICD', or 'patients'."
-                ),    
+                "description": "Compute de-identified risk scores for patients.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "cohort": {"type": "string", "nullable": True},
-                        "top_n": {"type": "integer", "defauly": 10}
+                        "cohort": {"type": "string", "nullable": True}
                     }
                 }
             }
@@ -110,33 +106,23 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
 # 3. Call local Python tools
 # ------------------------------
 def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = ""):
-    """
-    Dynamically route user questions to the most relevant local tool.
-    Supports flexible phrasing and interchangeable queries across cost, provider, fraud, and risk.
-    """
+
     user_q_lower = user_q.lower() if isinstance(user_q, str) else ""
-
-    # --- Cost drivers (ICD/CPT/period/plan/charge/expense) ---
-    if any(word in user_q_lower for word in ["cost", "charge", "expense", "driver", "top icd", "top cpt", "revenue", "q1", "q2", "quarter"]):
+    if name == "top_icd_cpt_cost" or "cost" in user_q_lower or "charge" in user_q_lower:
         return top_icd_cpt_cost(df, **args)
-
-    # --- Provider anomalies / comparisons ---
-    if any(word in user_q_lower for word in ["provider", "anomaly", "z-score", "outlier", "billing pattern", "compare"]):
+    if name == "provider_anomalies" or "provider" in user_q_lower or "quarter" in user_q_lower:
         return provider_anomalies(df, **args)
-
-    # --- Fraud / excessive claims / abuse detection ---
-    if any(word in user_q_lower for word in ["fraud", "flag", "excessive", "claims per patient", "abuse", "overbilling"]):
+    if name == "fraud_flags" or "fraud" in user_q_lower or "claims per patient" in user_q_lower:
         return fraud_flags(df, **args)
+    if name == "risk_scoring" or "risk" in nuser_q_lower or "cohort" in user_q_lower:
+        return risk_scoring(df, **args)
 
-    # --- Risk scoring / wait days / ICD or patient-level risk ---
-    if any(word in user_q_lower for word in ["risk", "patient", "cohort", "wait", "delay", "icd", "severity"]):
-        return risk_scoring(df, user_q=user_q, **args)
+    return {"error": f"Unknown tool: {name}", "context": user_q}
 
 
-    return {"summary": f"⚠️ No matching tool found for query: {user_q}", "table": []}
 
 # ------------------------------
-# 4. Main entrypoint (final stable version)
+# 4. Main entrypoint
 # ------------------------------
 def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
     key = st.secrets.get("OPENAI_API_KEY")
@@ -144,120 +130,221 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
     messages = _messages(user_q, rag)
     tools = _tools_schema()
+
     result_payload = {"summary": [], "tables": [], "figures": [], "citations": [], "next_steps": []}
 
-    auto_tool_result = None
-    auto_detected = False  # ✅ fixed typo
-
     try:
-        # 1️⃣ Try local auto-detection first (keyword-based intent routing)
-        try:
-            auto_tool_result = _call_tool("", {}, df, user_q=user_q)
-            if auto_tool_result and "⚠️ No matching" not in str(auto_tool_result.get("summary", "")):
-                auto_detected = True
-                st.info("🧠 Auto-detected tool execution based on query intent.")
-        except Exception as e:
-            st.warning(f"Auto-detect check failed: {e}")
+        # 1. Ask GPT (tool choice auto-enabled)
+        resp = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            temperature=0.2
+        )
 
-        # 2️⃣ If not auto-detected, let GPT choose the tool
-        if not auto_detected:
-            resp = client.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=0.2,
-            )
-            msg = resp.choices[0].message
+        msg = resp.choices[0].message
 
-            if msg.tool_calls:
-                for tc in msg.tool_calls:
-                    fn = tc.function.name
-                    args = json.loads(tc.function.arguments or "{}")
-                    auto_tool_result = _call_tool(fn, args, df, user_q=user_q)
-                    st.write(" tool_result preview:", auto_tool_result)
-                    auto_detected = True
-                    st.info(f"🧠 Tool invoked by GPT: {fn}")
+        # 2. If GPT requested a tool → run locally
+        if msg.tool_calls:
+            for tc in msg.tool_calls:
+                fn = tc.function.name
+                args = json.loads(tc.function.arguments or "{}")
 
-        # 3️⃣ If a tool executed successfully (either auto or GPT)
-        if auto_detected and auto_tool_result:
-            tool_result = auto_tool_result
+                # ✅ Run the tool locally
+                tool_result = _call_tool(fn, args, df, user_q=user_q)
 
-            # Normalize output
-            if isinstance(tool_result, dict):
-                if "summary" not in tool_result:
-                    tool_result["summary"] = "Tool executed successfully."
-                if "table" in tool_result and isinstance(tool_result["table"], pd.DataFrame):
-                    tool_result["table"] = tool_result["table"].to_dict(orient="records")
-            elif isinstance(tool_result, pd.DataFrame):
-                tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
-            else:
-                tool_result = {"summary": str(tool_result), "table": []}
+                # ✅ Normalize tool_result into valid JSON for GPT
+                if isinstance(tool_result, dict):
+                    if "summary" not in tool_result:
+                        tool_result["summary"] = "Tool executed successfully."
 
-            # Populate result payload
-            result_payload["summary"] = [tool_result.get("summary", "")]
-            result_payload["tables"] = tool_result.get("table", [])
-            result_payload["citations"] = [tool_result.get("table_name", "tool_output")]
-            result_payload["next_steps"] = [
-                "Review the above data for trends and outliers.",
-                "Validate ICD/CPT mappings or provider records.",
-                "Explore follow-up analysis on period-over-period changes.",
-            ]
+                    if "table" in tool_result and isinstance(tool_result["table"], pd.DataFrame):
+                        tool_result["table"] = tool_result["table"].to_dict(orient="records")
 
-        else:
-            # GPT fallback if no tool invoked
-            result_payload["summary"].append("No tools invoked — possible vague or unsupported query.")
-            result_payload["next_steps"].append("Try rephrasing with keywords like cost, provider, risk, or fraud.")
+                elif isinstance(tool_result, pd.DataFrame):
+                    tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
+                else:
+                    tool_result = {"summary": str(tool_result), "table": []}
 
-        # 4️⃣ Clean + flatten tables for Streamlit rendering
-        if "tables" in result_payload:
-            clean_tables = []
-            for t in result_payload["tables"]:
-                if isinstance(t, str):
-                    try:
-                        parsed = json.loads(t.replace("'", '"'))
-                        if isinstance(parsed, list):
-                            clean_tables.extend(parsed)
-                        elif isinstance(parsed, dict):
-                            clean_tables.append(parsed)
+                # ✅ Safe version for /chat/completions endpoint
+                import traceback
+                try:
+                    safe_tool_content = json.dumps(tool_result, default=str, indent=2)
+                except Exception as e:
+                    safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
+
+                tool_id = None
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    tool_id = getattr(msg.tool_calls[0], "id", "tool_1")
+                else:
+                    tool_id = getattr(tc, "id", "tool_1")
+
+                def _clean_msg(m):
+                    role = m.get("role", "user")
+                    content = m.get("content", "")
+                    if not isinstance(content, str):
+                        try:
+                            content = json.dumps(content, default=str)
+                        except Exception:
+                            content = str(content)
+                    return {"role": role, "content": content[:4000]}
+
+                clean_messages = [_clean_msg(m) for m in messages]
+
+                follow_messages = [
+                    *clean_messages,
+                    {"role": "assistant", "content": None, "tool_calls": [
+                         {
+                            "id": str(tool_id),
+                            "type": "function",
+                            "function": {"name": fn, "arguments": json.dumps(args)},
+                         }
+                       ] 
+                    }, 
+                    {"role": "tool", "content": safe_tool_content, "tool_call_id": str(tool_id)},
+                    {   
+                        "role": "user",
+                        "content": (
+                            "Format the final answer as valid JSON with keys: "
+                            "summary, tables, figures, citations, next_steps. "
+                            "Ensure JSON syntax is correct, concise, and under 2000 tokens."
+                        ),
+                    }
+                ]
+
+                try:
+                    st.write("🧩 follow_messages length:", len(follow_messages))
+                    st.write("✅ All content types stringified:", all(isinstance(m['content'], str) for m in follow_messages))
+                except Exception:
+                    pass
+
+                try:
+                    follow = client.chat.completions.create(
+                        model="gpt-4.1-mini",
+                        messages=follow_messages,
+                        temperature=0.2,
+                    )
+                except Exception as e:
+                    st.error(f"❌ GPT follow-up failed: {e}")
+                    st.write(traceback.format_exc())
+                    return {
+                        "summary": [f"Error during GPT follow-up: {str(e)}"],
+                        "tables": [],
+                        "figures": [],
+                        "citations": [],
+                        "next_steps": []
+                    }
+
+                # ✅ Parse GPT’s formatted JSON output
+                final_answer = follow.choices[0].message.content
+                try:
+                    parsed = json.loads(final_answer)
+                    for k in result_payload.keys():
+                        if isinstance(parsed.get(k), str):
+                            result_payload[k] = [parsed.get(k)]
                         else:
-                            clean_tables.append({"Raw": str(parsed)})
-                    except Exception:
-                        clean_tables.append({"Raw": t})
-                elif isinstance(t, list):
-                    for row in t:
-                        if isinstance(row, dict):
-                            clean_tables.append(row)
-                        else:
-                            clean_tables.append({"Value": str(row)})
-                elif isinstance(t, dict):
-                    clean_tables.append(t)
+                            result_payload[k] = parsed.get(k, result_payload[k])
 
-            # Expand nested ICD/CPT structures if any
-            final_rows = []
-            for row in clean_tables:
-                if isinstance(row, dict):
-                    quarter = row.get("Quarter") or row.get("quarter") or ""
-                    codes = row.get("Top ICD-10 Codes") or row.get("ICD10") or row.get("icd") or []
-                    if isinstance(codes, list):
-                        for sub in codes:
-                            if isinstance(sub, dict):
-                                final_rows.append({
-                                    "Quarter": quarter,
-                                    "ICD-10 Code": sub.get("ICD-10 Code") or sub.get("icd") or sub.get("Code"),
-                                    "Total Cost": sub.get("Total Cost") or sub.get("Cost") or sub.get("Charge"),
-                                    "Cost Share (%)": sub.get("Cost Share (%)") or sub.get("Share (%)"),
-                                })
+                    # Normalize table structure
+                    if "tables" in result_payload:
+                        fixed_tables = []
+                        for t in result_payload["tables"]:
+                            if isinstance(t, dict):
+                                fixed_tables.append(t)
+                            elif isinstance(t, list):
+                                fixed_tables.extend(t)
+                        result_payload["tables"] = fixed_tables
+
+                except Exception:
+                    result_payload["summary"].append(final_answer)
+
+                 # ✅ Normalize nested tables into a flat, readable structure
+            if "tables" in result_payload:
+                clean_tables = []
+
+                for t in result_payload["tables"]:
+                    # Case 1: If table is a stringified list of dicts
+                    if isinstance(t, str):
+                        try:
+                            parsed = json.loads(t.replace("'", '"'))
+                            if isinstance(parsed, list):
+                                clean_tables.extend(parsed)
+                            elif isinstance(parsed, dict):
+                                clean_tables.append(parsed)
                             else:
-                                final_rows.append({"Quarter": quarter, "ICD-10 Code": str(sub)})
+                                clean_tables.append({"Raw": str(parsed)})
+                        except Exception:
+                            clean_tables.append({"Raw": t})
+
+                    # Case 2: Already a list of dicts
+                    elif isinstance(t, list):
+                        for row in t:
+                            if isinstance(row, dict):
+                                clean_tables.append(row)
+                            else:
+                                clean_tables.append({"Value": str(row)})
+
+                    # Case 3: Single dict
+                    elif isinstance(t, dict):
+                        clean_tables.append(t)
+
+                # Optional: if quarters detected inside list, flatten that too
+                # e.g. [{"Quarter": "Q1 2024", "Top ICD-10 Codes": [...]}, ...]
+                final_rows = []
+                for row in clean_tables:
+                    if isinstance(row, dict):
+                        quarter = row.get("Quarter") or row.get("quarter" or ""
+                        quarter = row.get("Quarter") or row.get("quarter") or ""
+                        codes = row.get("Top ICD-10 Codes") or row.get("ICD10") or row.get("icd") or []
+
+                        # Case: nested list of ICD dictionaries
+                        if isinstance(codes, list):
+                            for code_entry in codes:
+                                if isinstance(code_entry, dict):
+                                    final_rows.append({
+                                        "Quarter": quarter,
+                                        "ICD-10 Code": code_entry.get("ICD-10 Code") or code_entry.get("icd") or code_entry.get("Code"),
+                                        "Total Cost": code_entry.get("Total Cost") or code_entry.get("Cost") or code_entry.get("Charge"),
+                                        "Cost Share (%)": code_entry.get("Cost Share (%)") or code_entry.get("Share (%)"),
+                                    })
+                                else:
+                                    final_rows.append({
+                                        "Quarter": quarter,
+                                        "ICD-10 Code": str(code_entry),
+                                        "Total Cost": None,
+                                        "Cost Share (%)": None,
+                                })
                     else:
-                        final_rows.append(row)
+                        # Single ICD entry already flattened
+                        final_rows.append({
+                            "Quarter": quarter,
+                            "ICD-10 Code": row.get("ICD-10 Code"),
+                            "Total Cost": row.get("Total Cost"),
+                            "Cost Share (%)": row.get("Cost Share (%)"),
+                        })
+                                    })
+                        else:
+                            # Single ICD entry already flattened
+                            final_rows.append({
+                                "Quarter": quarter,
+                                "ICD-10 Code": row.get("ICD-10 Code"),
+                                "Total Cost": row.get("Total Cost"),
+                                "Cost Share (%)": row.get("Cost Share (%)"),
+                            })
 
-            result_payload["tables"] = pd.DataFrame(final_rows).replace({None: ""}).to_dict(orient="records")
+            # Clean out empty rows and replace None with blanks
+            df_final = pd.DataFrame(final_rows)
+            df_final = df_final.dropna(how="all")
+            df_final = df_final.fillna("")
 
 
 
+            result_payload["tables"] = df_final.to_dict(orient="records")
 
+
+        # 3. Fallback if no tools invoked
+        result_payload["summary"].append(msg.content or "No tools invoked.")
         return result_payload
 
     except openai.RateLimitError:
