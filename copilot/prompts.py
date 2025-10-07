@@ -12,6 +12,7 @@ When answering:
 - Always quantify when possible.
 - Only include information directly relevant to the user's question (no unrelated content or speculation).
 - Do not restate instructions; go straight to analysis.
+- When the user asks about costs, charges, top ICD or CPT codes, or any quarter/period, use top_icd_cost tool.
 """
 
 # === FEW-SHOT EXAMPLES ===
