@@ -311,8 +311,10 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                                                                           
 
         # 3. Fallback if no tools invoked
-        if not result_payload["summary"]:
-            result_payload["summary"].append(msg.content or "No tools invoked.")
+        if not result_payload.get("summary"):
+            result_payload["summary"] = [msg.content or "No tools invoked."]
+        if not result_payload.get("tables"):
+            result_payload["tables"] = []
 
         # ✅ Ensure next_steps and citations always exist
         if not result_payload.get("next_steps") or len(result_payload["next_steps"]) == 0:
