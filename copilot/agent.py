@@ -106,19 +106,49 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
 # 3. Call local Python tools
 # ------------------------------
 def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = ""):
-
     user_q_lower = user_q.lower() if isinstance(user_q, str) else ""
-    if name == "top_icd_cpt_cost" or "cost" in user_q_lower or "charge" in user_q_lower:
-        return top_icd_cpt_cost(df, **args)
-    if name == "provider_anomalies" or "provider" in user_q_lower or "quarter" in user_q_lower:
-        return provider_anomalies(df, **args)
-    if name == "fraud_flags" or "fraud" in user_q_lower or "claims per patient" in user_q_lower:
-        return fraud_flags(df, **args)
-    if name == "risk_scoring" or "risk" in nuser_q_lower or "cohort" in user_q_lower:
-        return risk_scoring(df, **args)
-    
-    return {"error": f"Unknown tool: {name}", "context": user_q}
 
+  # 🧠 Cost driver detection
+    if (
+        name == "top_icd_cpt_cost"
+        or "cost" in user_q_lower
+        or "charge" in user_q_lower
+        or "driver" in user_q_lower
+    ):
+        return top_icd_cpt_cost(df, **args)
+
+    # 🧠 Provider anomaly detection
+    if (
+        name == "provider_anomalies"
+        or "provider" in user_q_lower
+        or "z-score" in user_q_lower
+        or "quarter" in user_q_lower
+        or "compare" in user_q_lower
+    ):
+        return provider_anomalies(df, **args)
+
+    # 🧠 Fraud detection
+    if (
+        name == "fraud_flags"
+        or "fraud" in user_q_lower
+        or "claims per patient" in user_q_lower
+        or "overbilling" in user_q_lower
+    ):
+        return fraud_flags(df, **args)
+
+    # 🧠 Risk scoring or wait-time analysis
+    if (
+        name == "risk_scoring"
+        or "risk" in user_q_lower
+        or "cohort" in user_q_lower
+        or "wait" in user_q_lower
+        or "delay" in user_q_lower
+        or "time to" in user_q_lower
+        or "patient" in user_q_lower
+    ):
+        return risk_scoring(df, user_q=user_q, **args)
+
+    return {"summary": f"⚠️ Unknown tool: {name}", "table": []}
 
 
 # ------------------------------
