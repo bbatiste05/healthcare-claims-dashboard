@@ -294,22 +294,43 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 final_rows = []
                 for row in clean_tables:
                     if isinstance(row, dict):
-                        for key, val in row.items():
-                            if isinstance(val, list):
-                                # Expand nested ICD or CPT code lists into separate rows
-                                for sub in val:
-                                    if isinstance(sub, dict):
-                                        sub["Quarter"] = row.get("Quarter", "")
-                                        final_rows.append(sub)
-                                    else:
-                                        final_rows.append({
-                                            "Quarter": row.get("Quarter", ""),
-                                            "Value": str(sub)
-                                        })
-                            else:
-                                final_rows.append(row)
+                        quarter = row.get("Quarter") or row.get("quarter" or ""
+                        codes = row.get("Top ICD-10 Codes") or row.get("ICD10") or row.get("icd") or []
 
-                result_payload["tables"] = final_rows
+                        # Case: nested list of ICD dictionaries
+                        if isinstance(codes, list):
+                            for code_entry in codes:
+                                if isinstance(code_entry, dict):
+                                    final_rows.append({
+                                        "Quarter": quarter,
+                                        "ICD-10 Code": code_entry.get("ICD-10 Code") or code_entry.get("icd") or code_entry.get("Code"),
+                                        "Total Cost": code_entry.get("Total Cost") or code_entry.get("Cost") or code_entry.get("Charge"),
+                                        "Cost Share (%)": code_entry.get("Cost Share (%)") or code_entry.get("Share (%)"),
+                                    })
+                                else:
+                                    final_rows.append({
+                                        "Quarter": quarter,
+                                        "ICD-10 Code": str(code_entry),
+                                        "Total Cost": None,
+                                        "Cost Share (%)": None,
+                                })
+                    else:
+                        # Single ICD entry already flattened
+                        final_rows.append({
+                            "Quarter": quarter,
+                            "ICD-10 Code": row.get("ICD-10 Code"),
+                            "Total Cost": row.get("Total Cost"),
+                            "Cost Share (%)": row.get("Cost Share (%)"),
+                        })
+
+            # Clean out empty rows and replace None with blanks
+            df_final = pd.DataFrame(final_rows)
+            df_final = df_final.dropna(how="all")
+            df_final = df_final.fillna("")
+
+                            
+
+            result_payload["tables"] = df_final.to_dict(orient="records")
 
 
         # 3. Fallback if no tools invoked
