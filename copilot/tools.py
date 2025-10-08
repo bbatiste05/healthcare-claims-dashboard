@@ -162,36 +162,74 @@ def provider_anomalies(df: pd.DataFrame, code: str = None, metric: str = "z",
         elif col_icd:
             d = d[d[col_icd].astype(str) == str(code)]
 
-    # compare quarters
-    if (compare or (period and "_vs_" in str(period))) and col_date:
-        pair = (compare or period)
+   if period and "_vs_" in str(period):
         try:
-            a, b = str(pair).split("_vs_")
-            d["Quarter"] = d[col_date].apply(_quarter_label)
+            q1, q2 = period.split("_vs_")
+            qmap = {"Q1": (1, 3), "Q2": (4, 6), "Q3": (7, 9), "Q4": (10, 12)}
+
+            # --- Robust date column detection ---
+            possible_dates = [c for c in ["claim_date", "service_date", "date_of_service", "dos"] if c in df.columns]
+            if not possible_dates:
+                raise ValueError("No date column found for quarter comparison.")
+            date_col = possible_dates[0]
+
+            d[date_col] = pd.to_datetime(d[date_col], errors="coerce")
+            d["month"] = d[date_col].dt.month
+            d["year"] = d[date_col].dt.year
+
+            # --- Map month to quarter ---
+            def _get_quarter(m):
+                for q, (start, end) in qmap.items():
+                    if start <= m <= end:
+                        return q
+                return None
+
+            d["quarter"] = d["month"].map(_get_quarter)
+            d["period"] = d["year"].astype(str) + d["quarter"]
+
+            # --- Aggregate charge amounts per provider per period ---
             pivot = (
-                d.groupby([col_prov, "Quarter"])[col_charge]
-                 .sum()
-                 .unstack(fill_value=0)
-                 .reset_index()
-                 .rename(columns={col_prov: "provider_id"})
+                d.groupby(["provider_id", "period"])["charge_amount"]
+                .sum()
+                .unstack(fill_value=0)
             )
-            if a not in pivot.columns or b not in pivot.columns:
-                return {
-                    "summary": f"Could not find both quarters ({a} and {b}) in data.",
-                    "table_name": "provider_quarter_comparison",
-                    "table": []
-                }
-            pivot["Δ_Charge"] = pivot[b] - pivot[a]
-            pivot["Δ_%"] = ((pivot[b] - pivot[a]) / pivot[a].replace(0, pd.NA) * 100).round(2)
+
+            # --- Flexible matching (handles “2024Q1” vs “Q1 2024”) ---
+            pivot_cols = [c.replace(" ", "").replace("_", "") for c in pivot.columns]
+            colmap = dict(zip(pivot.columns, pivot_cols))
+
+            q1_clean = q1.replace(" ", "").replace("_", "")
+            q2_clean = q2.replace(" ", "").replace("_", "")
+
+            match_q1 = next((k for k, v in colmap.items() if q1_clean.lower() in v.lower()), None)
+            match_q2 = next((k for k, v in colmap.items() if q2_clean.lower() in v.lower()), None)
+
+            if not match_q1 or not match_q2:
+                raise ValueError(f"Could not find both quarters ({q1} and {q2}) in data.")
+
+            # --- Compute changes ---
+            pivot["Δ_Charge"] = pivot[match_q2] - pivot[match_q1]
+            pivot["Δ_%"] = (pivot["Δ_Charge"] / pivot[match_q1].replace(0, pd.NA)) * 100
             pivot["Flagged"] = pivot["Δ_%"].abs() >= 20
-            out = pivot.sort_values("Δ_%", ascending=False)
+
+            pivot = pivot.reset_index()
+            summary = (
+                f"Compared provider billing between {match_q1} and {match_q2}. "
+                f"{pivot['Flagged'].sum()} providers showed ≥20% change."
+            )
+
             return {
-                "summary": f"Compared provider billing between {a} and {b}. {int(out['Flagged'].sum())} providers showed ≥20% change.",
+                "summary": summary,
                 "table_name": "provider_quarter_comparison",
-                "table": out.to_dict(orient="records")
+                "table": pivot[["provider_id", match_q1, match_q2, "Δ_Charge", "Δ_%", "Flagged"]],
             }
-        except Exception:
-            pass  # fall through to z-score
+
+        except Exception as e:
+            return {
+                "summary": f"Error comparing quarters: {str(e)}",
+                "table_name": "provider_quarter_comparison",
+                "table": [],
+            }
 
     # default z-score on total charge
     agg = d.groupby(col_prov)[col_charge].sum().to_frame("total_charge")
