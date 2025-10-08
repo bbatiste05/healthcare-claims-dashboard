@@ -461,6 +461,16 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
         if not result_payload.get("tables"):
             result_payload["tables"] = []
 
+        # ✅ Remove any placeholder 'Table' column or empty header row
+        try:
+            df_temp = pd.DataFrame(result_payload["tables"])
+            if "Table" in df_temp.columns:
+                df_temp.drop(columns=["Table"], inplace=True)
+            df_temp = df_temp.fillna("")
+            result_payload["tables"] = df_temp.to_dict(orient="records")
+        except Exception as e:
+            st.warning(f"⚠️ Could not clean table column: {e}")
+
           # ✅ Enrich short summaries into analytical insights
         if result_payload.get("summary"):
             enriched_summary = []
