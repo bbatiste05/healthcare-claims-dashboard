@@ -162,7 +162,7 @@ def provider_anomalies(df: pd.DataFrame, code: str = None, metric: str = "z",
         elif col_icd:
             d = d[d[col_icd].astype(str) == str(code)]
 
-   if period and "_vs_" in str(period):
+    if period and "_vs_" in str(period):
         try:
             q1, q2 = period.split("_vs_")
             qmap = {"Q1": (1, 3), "Q2": (4, 6), "Q3": (7, 9), "Q4": (10, 12)}
