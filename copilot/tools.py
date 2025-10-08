@@ -100,11 +100,28 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None,
     top = cost_df.sort_values("Total Cost", ascending=False).head(top_n)
 
     # --- Compose summary ---
-    summary = (
-        f"Top {top_n} {label}s driving total costs"
-        + (f" in {period}" if period else "")
-        + f". Highest single {label} accounts for {top.iloc[0]['Cost Share (%)']:.1f}% of total costs."
-    )
+    try:
+        top_code = top.iloc[0][label] if label in top.columns else None
+        top_share = topiloc[0]["Cost Share (%)"]
+        total_cost = top["Total Cost"].sum()
+        top_mean = top["Total Cost"].mean()
+
+        summary = (
+            f"Top {top_n} {label}s drove approximately ${total_cost:,.0f} in total billed costs"
+            + (f" during {period}" if period else "")
+            + f". The highest individual {label} "
+            + (f"({top_code}) " if top_code else "")
+            + f"accounts for about {top_share:.1f}% of all costs. "
+            f"Average cost among the top {top_n} {label}s is roughly ${top_mean:,.0f}. "
+            "These results indicate that a small subset of procedure or diagnosis codes "
+            "dominate overall expenditures, suggesting potential targets for cost-containment review."
+        )
+    except Exception:
+        summary = (
+            f"Top {top_n} {label}s driving total costs"
+            + (f" in {period}" if period else "")
+            + ". Summary generation limited due to missing data."
+        )
 
     next_steps = [
         f"Review utilization and billing volume for top {label}s.",
