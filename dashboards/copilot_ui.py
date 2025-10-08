@@ -21,9 +21,16 @@ def run(claims_df):
 
     # --- Display the Copilot's response ---
     st.markdown("### 📝 Summary")
-    for s in result.get("summary", []):
-        formatted_summary = s.replace(". ", ". \n\n")
-        st.markdown(formatted_summary)
+
+    summaries = result.get("summary", [])
+    if summaries:
+        for s in summaries:
+            # Force clean paragraph breaks: split by ". " and rebuild
+            sentences = [sent.strip() for sent in s.split(". ") if sent.strip()]
+            formatted_summary = "\n\n".join(f"• {sent}." for sent in sentences)
+            st.markdown(formatted_summary)
+    else:
+        st.info("No summary available.")
 
     # ✅ Display Table (formatted if available)
     if result.get("tables"):
