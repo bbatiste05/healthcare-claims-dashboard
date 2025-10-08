@@ -411,7 +411,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             elif isinstance(result_payload["tables"], list) and isinstance(tool_result["table"], list):
                 result_payload["tables"].extend(tool_result["table"])
 
-          # ✅ Ensure fallback citations exist even if autoroute returns early
+        # ✅ Ensure fallback citations exist even if autoroute returns early
         if not result_payload.get("citations") or len(result_payload["citations"]) == 0:
             if "provider" in user_q.lower():
                 result_payload["citations"] = ["provider_anomalies.csv"]
