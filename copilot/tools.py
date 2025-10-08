@@ -1,266 +1,308 @@
+# copilot/tools.py
 import pandas as pd
-import numpy as np
+from datetime import datetime
+from typing import Dict, Any, List, Optional
 
-# === SAFE WRAPPER ===
-def _safe_run(func):
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            return {"summary": f"⚠️ Tool error: {str(e)}", "table": []}
-    return wrapper
+# ---------- small helpers ----------
 
+_COL_ALIASES = {
+    "cpt": ["cpt", "cpt_code", "procedure_code"],
+    "icd10": ["icd10", "icd", "icd_code", "diagnosis_code"],
+    "provider_id": ["provider_id", "npi", "provider"],
+    "patient_id": ["patient_id", "member_id", "person_id"],
+    "charge_amount": ["charge_amount", "amount", "charge", "total_charge_amount", "cost"],
+    "service_date": ["service_date", "claim_date", "date_of_service", "dos", "date"]
+}
 
-# === HELPER ===
-def _require_cols(df, cols):
-    missing = [c for c in cols if c not in df.columns]
+def _coerce_col(df: pd.DataFrame, canonical: str) -> Optional[str]:
+    """Find or create a canonical column; return its actual name in df or None."""
+    for c in _COL_ALIASES.get(canonical, []):
+        if c in df.columns:
+            return c
+    return None
+
+def _find_date_col(df: pd.DataFrame) -> Optional[str]:
+    c = _coerce_col(df, "service_date")
+    if not c: 
+        return None
+    # make sure it's datetime
+    if not pd.api.types.is_datetime64_any_dtype(df[c]):
+        with pd.option_context("mode.chained_assignment", None):
+            df[c] = pd.to_datetime(df[c], errors="coerce")
+    return c
+
+def _quarter_label(dt: pd.Timestamp) -> str:
+    q = (dt.month - 1)//3 + 1
+    return f"Q{q} {dt.year}"
+
+def _top_n(df: pd.DataFrame, n: int) -> pd.DataFrame:
+    return df.head(n).reset_index(drop=True)
+
+def _pct(x, total):
+    return round(100 * (x / total), 2) if total else 0.0
+
+def _require_cols(df: pd.DataFrame, needed: List[str]):
+    missing = [c for c in needed if c not in df.columns]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
+# ---------- TOOLS ----------
 
-# ------------------------------
-# 1️⃣ TOP ICD/CPT COST TOOL
-# ------------------------------
-@_safe_run
-def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None, period=None, plan=None, top_n=10):
+def top_icd_cpt_cost(df: pd.DataFrame, icd: str = None, cpt: str = None,
+                     period: str = None, plan: str = None, top_n: int = 10) -> Dict[str, Any]:
     """
-    Summarize top ICD or CPT codes driving total costs.
+    Return top cost drivers. If CPT data/column is missing or question asks ICD, falls back to ICD.
+    period accepts formats:
+      - '2024Q2'
+      - '2024-01:2024-06'  (inclusive range)
+      - None  (all data)
     """
-    _require_cols(df, ["charge_amount"])
-
     d = df.copy()
-    # Handle naming inconsistencies
-    for alt in ["service_date", "claim_date", "date"]:
-        if alt in d.columns:
-            d["date"] = pd.to_datetime(d[alt], errors="coerce")
-            break
 
-    d["charge_amount"] = pd.to_numeric(d["charge_amount"], errors="coerce")
-    d.dropna(subset=["charge_amount"], inplace=True)
+    # column resolution
+    col_charge = _coerce_col(d, "charge_amount")
+    col_cpt    = _coerce_col(d, "cpt")
+    col_icd    = _coerce_col(d, "icd10")
+    col_date   = _find_date_col(d)
 
-    # Select grouping level
-    group_col = "icd10" if "icd10" in d.columns else "cpt" if "cpt" in d.columns else None
-    if not group_col:
-        return {"summary": "No ICD or CPT column found in dataset.", "table": []}
+    _require_cols(d, [col_charge])  # at minimum we need charge
 
-    # Period filtering (e.g. "Q2 2024")
-    if period:
-        if "Q" in period:
-            year, quarter = period.split("Q")
-            year = int(year)
-            q_num = int(quarter)
-            q_start = (q_num - 1) * 3 + 1
-            q_end = q_start + 2
-            d = d[d["date"].dt.year == year]
-            d = d[d["date"].dt.month.between(q_start, q_end)]
+    # optional period filter
+    if col_date:
+        if period:
+            period = str(period).strip()
+            if "Q" in period and len(period) in (6, 7): # e.g. 2024Q2 / Q2 2024
+                year = int(period[:4]) if period[0].isdigit() else int(period[-4:])
+                q = int(period[-1])
+                start_month = (q-1)*3 + 1
+                end_month = start_month + 2
+                mask = (d[col_date].dt.year == year) & (d[col_date].dt.month.between(start_month, end_month))
+                d = d[mask]
+            elif ":" in period:
+                start_s, end_s = period.split(":")
+                try:
+                    start = pd.to_datetime(start_s, errors="coerce")
+                    end   = pd.to_datetime(end_s, errors="coerce")
+                    d = d[(d[col_date] >= start) & (d[col_date] <= end)]
+                except Exception:
+                    pass
 
-    # Aggregate totals
-    agg = (
-        d.groupby(group_col)["charge_amount"]
+    # which axis to use?
+    prefer_cpt = bool(cpt) or ("cpt" in (icd or "").lower() and col_cpt)
+    use_cpt = bool(col_cpt) and prefer_cpt
+    use_icd = bool(col_icd) and not use_cpt
+
+    # if the user asked for CPT but we don't have CPT column → fallback to ICD
+    axis = None
+    if use_cpt:
+        axis = ("CPT Code", col_cpt)
+    elif use_icd:
+        axis = ("ICD-10 Code", col_icd)
+    elif col_cpt:
+        axis = ("CPT Code", col_cpt)
+    elif col_icd:
+        axis = ("ICD-10 Code", col_icd)
+    else:
+        # nothing to group by, return empty
+        total = float(d[col_charge].sum())
+        return {
+            "summary": "No CPT or ICD column found; cannot compute cost drivers.",
+            "table_name": "cost_drivers",
+            "table": []
+        }
+
+    label, col_group = axis
+
+    # aggregate
+    g = (
+        d.groupby(col_group)[col_charge]
         .sum()
         .sort_values(ascending=False)
-        .head(top_n)
         .reset_index()
+        .rename(columns={col_group: label, col_charge: "Total Cost"})
     )
-    agg["Cost Share (%)"] = (agg["charge_amount"] / agg["charge_amount"].sum() * 100).round(2)
-    agg.rename(columns={group_col: group_col.upper(), "charge_amount": "Total Cost"}, inplace=True)
+    total_cost = float(g["Total Cost"].sum())
+    g["Cost Share (%)"] = g["Total Cost"].apply(lambda x: _pct(x, total_cost))
+    g = _top_n(g, top_n)
 
-   # --- Compute summary metrics ---
-    try:
-        total_cost = agg["Total Cost"].sum()
-        top_cost = agg["Total Cost"].head(top_n).sum()
-        share_top = (top_cost / total_cost * 100) if total_cost > 0 else 0
+    # summary
+    if period:
+        summary = f"Top {label.split()[0]} cost drivers for {period}."
+    else:
+        summary = f"Top {label.split()[0]} cost drivers across all claims."
 
-        # handle both ICD and CPT cases gracefully
-        code_col = "ICD-10 Code" if "ICD-10 Code" in agg.columns else "CPT"
-        top_codes = agg[code_col].head(top_n).tolist() if code_col in agg.columns else []
-        lead_share = agg["Cost Share (%)"].iloc[0] if not agg.empty else 0
-
-        summary = (
-            f"Across all claims, total charges were ${total_cost:,.0f}. "
-            f"The top {top_n} {code_col} codes accounted for {share_top:.1f}% of total cost, "
-            f"with {top_codes[0] if top_codes else 'N/A'} leading at {lead_share:.1f}%."
-        )
-    except Exception as e:
-        summary = f"Unable to compute summary metrics due to data issue: {e}"
-
-    # --- Return structured output ---
     return {
         "summary": summary,
-        "table_name": "top_cost_drivers",
-        "table": agg.to_dict(orient="records"),
-        "next_steps": [
-            "Analyze high-cost procedures for potential efficiency improvements.",
-            "Review cost concentration trends by quarter and provider."
-        ],
-        "citations": ["claim_df", "icd.csv"]
-    }    
-# ------------------------------
-# 2️⃣ PROVIDER ANOMALIES TOOL
-# ------------------------------
-@_safe_run
-def provider_anomalies(df: pd.DataFrame, code=None, metric='z', threshold=3.0, period=None, **kwargs):
+        "table_name": "cost_drivers",
+        "table": g.to_dict(orient="records"),
+        "citations": ["claims_df"]
+    }
+
+
+def provider_anomalies(df: pd.DataFrame, code: str = None, metric: str = "z",
+                       threshold: float = 3.0, period: str = None, compare: str = None) -> Dict[str, Any]:
     """
-    Detect provider outliers or compare quarter-over-quarter anomalies.
+    - Default: z-score outliers on provider total charge.
+    - If compare like '2024Q1_vs_2024Q2' → produce quarter-over-quarter table with deltas.
+    - Supports filter by ICD/CPT code if provided.
     """
-    _require_cols(df, ["provider_id", "charge_amount"])
     d = df.copy()
+    col_charge = _coerce_col(d, "charge_amount")
+    col_prov   = _coerce_col(d, "provider_id")
+    col_cpt    = _coerce_col(d, "cpt")
+    col_icd    = _coerce_col(d, "icd10")
+    col_date   = _find_date_col(d)
 
-    # --- Normalize charge column ---
-    d["charge_amount"] = pd.to_numeric(d["charge_amount"], errors="coerce")
-    d.dropna(subset=["charge_amount"], inplace=True)
+    _require_cols(d, [col_charge, col_prov])
 
-    # --- Optional filter by code ---
-    if code:
-        for c in ["cpt", "icd10"]:
-            if c in d.columns:
-                d = d[d[c].astype(str) == str(code)]
+    # optional filter by code
+    if code and (col_cpt or col_icd):
+        if col_cpt and d[col_cpt].astype(str).str.contains(str(code)).any():
+            d = d[d[col_cpt].astype(str) == str(code)]
+        elif col_icd:
+            d = d[d[col_icd].astype(str) == str(code)]
 
-    # --- Detect comparison mode ---
-    if period and "_vs_" in str(period):
+    # compare quarters
+    if (compare or (period and "_vs_" in str(period))) and col_date:
+        pair = (compare or period)
         try:
-            q1, q2 = period.split("_vs_")
-            qmap = {"Q1": (1, 3), "Q2": (4, 6), "Q3": (7, 9), "Q4": (10, 12)}
-
-            for alt in ["claim_date", "service_date", "date"]:
-                if alt in d.columns:
-                    d["date"] = pd.to_datetime(d[alt], errors="coerce")
-                    break
-
-            d["month"] = d["date"].dt.month
-            d["year"] = d["date"].dt.year
-
-            def get_q(m): 
-                for q, (s, e) in qmap.items():
-                    if s <= m <= e: return q
-                return None
-
-            d["quarter"] = d["month"].map(get_q)
-            d["period"] = d["year"].astype(str) + d["quarter"]
-
+            a, b = str(pair).split("_vs_")
+            d["Quarter"] = d[col_date].apply(_quarter_label)
             pivot = (
-                d.groupby(["provider_id", "period"])["charge_amount"]
-                .sum()
-                .unstack(fill_value=0)
+                d.groupby([col_prov, "Quarter"])[col_charge]
+                 .sum()
+                 .unstack(fill_value=0)
+                 .reset_index()
+                 .rename(columns={col_prov: "provider_id"})
             )
-
-            if q1 in pivot.columns and q2 in pivot.columns:
-                pivot["Δ_Charge"] = pivot[q2] - pivot[q1]
-                pivot["Δ_%"] = ((pivot[q2] - pivot[q1]) / pivot[q1].replace(0, np.nan)) * 100
-                pivot = pivot.reset_index()
-                pivot["Flagged"] = pivot["Δ_%"].abs() >= 20
-
-                summary = (
-                    f"Compared billing between {q1} and {q2}: "
-                    f"{pivot['Flagged'].sum()} providers showed ≥20% change."
-                )
-
+            if a not in pivot.columns or b not in pivot.columns:
                 return {
-                    "summary": summary,
+                    "summary": f"Could not find both quarters ({a} and {b}) in data.",
                     "table_name": "provider_quarter_comparison",
-                    "table": pivot[["provider_id", q1, q2, "Δ_Charge", "Δ_%", "Flagged"]],
+                    "table": []
                 }
-        except Exception as e:
-            return {"summary": f"Quarter comparison failed: {str(e)}", "table": []}
+            pivot["Δ_Charge"] = pivot[b] - pivot[a]
+            pivot["Δ_%"] = ((pivot[b] - pivot[a]) / pivot[a].replace(0, pd.NA) * 100).round(2)
+            pivot["Flagged"] = pivot["Δ_%"].abs() >= 20
+            out = pivot.sort_values("Δ_%", ascending=False)
+            return {
+                "summary": f"Compared provider billing between {a} and {b}. {int(out['Flagged'].sum())} providers showed ≥20% change.",
+                "table_name": "provider_quarter_comparison",
+                "table": out.to_dict(orient="records")
+            }
+        except Exception:
+            pass  # fall through to z-score
 
-    # --- Standard Z-score anomaly detection ---
-    agg = d.groupby("provider_id")["charge_amount"].sum().to_frame("total_charge")
-    mu, sigma = agg["total_charge"].mean(), agg["total_charge"].std(ddof=0)
-    agg["zscore"] = (agg["total_charge"] - mu) / (sigma if sigma != 0 else 1.0)
+    # default z-score on total charge
+    agg = d.groupby(col_prov)[col_charge].sum().to_frame("total_charge")
+    mu = float(agg["total_charge"].mean())
+    sd = float(agg["total_charge"].std(ddof=0)) or 1.0
+    agg["zscore"] = (agg["total_charge"] - mu) / sd
     agg["Flagged"] = agg["zscore"] >= float(threshold)
+    outliers = agg[agg["Flagged"]].reset_index().rename(columns={col_prov: "provider_id"})
+    outliers = outliers.sort_values("zscore", ascending=False)
 
-    outliers = agg[agg["Flagged"]].reset_index().sort_values("zscore", ascending=False)
-    summary = (
-        f"{len(outliers)} providers exhibit unusually high billing patterns (Z ≥ {threshold}). "
-        f"Highest total charge: ${agg['total_charge'].max():,.0f}."
-    )
-
+    summary = f"{len(outliers)} providers with Z≥{threshold} on total charge."
     return {
         "summary": summary,
         "table_name": "provider_outliers",
-        "table": outliers[["provider_id", "total_charge", "zscore", "Flagged"]],
+        "table": outliers.to_dict(orient="records")
     }
 
 
-# ------------------------------
-# 3️⃣ FRAUD FLAGS TOOL
-# ------------------------------
-@_safe_run
-def fraud_flags(df: pd.DataFrame, min_claims_per_patient=5, window_days=90):
-    """
-    Flag providers with excessive claims per patient within a window.
-    """
-    _require_cols(df, ["provider_id", "patient_id", "claim_date"])
+def fraud_flags(df: pd.DataFrame, min_claims_per_patient: int = 10, window_days: int = 90) -> Dict[str, Any]:
+    """Flag providers exceeding a threshold of claims per patient within a rolling window."""
     d = df.copy()
-    d["claim_date"] = pd.to_datetime(d["claim_date"], errors="coerce")
+    col_prov = _coerce_col(d, "provider_id")
+    col_pt   = _coerce_col(d, "patient_id")
+    col_date = _find_date_col(d)
 
-    recent = d.groupby(["provider_id", "patient_id"])["claim_date"].agg(["count", "min", "max"]).reset_index()
-    recent["days_span"] = (recent["max"] - recent["min"]).dt.days
-    flagged = recent[recent["count"] >= min_claims_per_patient]
-    flagged = flagged[flagged["days_span"] <= window_days]
+    _require_cols(d, [col_prov, col_pt])
+    if not col_date:
+        return {"summary": "Missing service/claim date column.", "table_name": "fraud_flags", "table": []}
 
-    summary = (
-        f"{len(flagged)} providers flagged for ≥{min_claims_per_patient} claims per patient "
-        f"within {window_days} days."
+    d = d.sort_values([col_pt, col_date])
+    # rolling count of claims per patient within window
+    d["window_start"] = d[col_date] - pd.Timedelta(days=int(window_days))
+    # count claims per patient within window by provider
+    out = (
+        d.merge(
+            d[[col_pt, col_date]].rename(columns={col_date: "date2"}),
+            on=col_pt, how="left"
+        )
+        .query("date2 >= window_start and date2 <= @d[col_date]")
+        .groupby([col_prov, col_pt, col_date]).size().reset_index(name="claims_in_window")
     )
+    flagged = (
+        out[out["claims_in_window"] > int(min_claims_per_patient)]
+        .groupby(col_prov)["claims_in_window"].max()
+        .reset_index()
+        .rename(columns={col_prov: "provider_id"})
+        .sort_values("claims_in_window", ascending=False)
+    )
+    summary = f"{len(flagged)} providers exceeded {min_claims_per_patient} claims/patient in {window_days} days."
+    return {"summary": summary, "table_name": "fraud_flags", "table": flagged.to_dict(orient="records")}
 
-    return {
-        "summary": summary,
-        "table_name": "fraud_flagged_providers",
-        "table": flagged.to_dict(orient="records"),
-    }
 
-
-# ------------------------------
-# 4️⃣ RISK SCORING TOOL
-# ------------------------------
-@_safe_run
-def risk_scoring(df: pd.DataFrame, cohort: str = None, **kwargs):
+def risk_scoring(df: pd.DataFrame, cohort: str = None, top_n: int = 10, by_icd: bool = False) -> Dict[str, Any]:
     """
-    Compute synthetic risk scores for each patient.
-    - Uses available fields like charge_amount, num_procedures, and wait_days.
-    - Optionally filters to cohort or ICD code subset.
+    Synthetic risk score combining charge_amount + num_procedures + wait_days (if present).
+    If by_icd=True, returns top patients with their dominant ICD.
     """
-    available = df.columns.tolist()
-    factors = [c for c in ["charge_amount", "num_procedures", "wait_days"] if c in available]
-    if not factors:
-        return {"summary": "No numeric risk factors available for scoring.", "table": []}
-
     d = df.copy()
-    for f in factors:
-        d[f] = pd.to_numeric(d[f], errors="coerce")
+    col_pt   = _coerce_col(d, "patient_id")
+    col_amt  = _coerce_col(d, "charge_amount")
+    col_proc = "num_procedures" if "num_procedures" in d.columns else None
+    col_wait = "wait_days" if "wait_days" in d.columns else None
+    col_icd  = _coerce_col(d, "icd10")
 
-    if "patient_id" not in d.columns:
-        return {"summary": "Missing patient_id column for risk computation.", "table": []}
+    _require_cols(d, [col_pt, col_amt])
 
-    # Synthetic weighted score
+    # fill missing optional columns
+    if col_proc is None:
+        d["num_procedures"] = 1
+        col_proc = "num_procedures"
+    if col_wait is None:
+        d["wait_days"] = 0
+        col_wait = "wait_days"
+
+    # simple normalization
+    for c in [col_amt, col_proc, col_wait]:
+        d[c] = pd.to_numeric(d[c], errors="coerce").fillna(0)
+
     d["risk_score"] = (
-        0.6 * (d["charge_amount"] / d["charge_amount"].max()) +
-        0.3 * (d["num_procedures"] / d["num_procedures"].max() if "num_procedures" in d else 0) +
-        0.1 * (d["wait_days"] / (d["wait_days"].max() if "wait_days" in d else 1))
+        0.6 * (d[col_amt]  / (d[col_amt].max()  or 1)) +
+        0.3 * (d[col_proc] / (d[col_proc].max() or 1)) +
+        0.1 * (d[col_wait] / (d[col_wait].max() or 1))
     ).round(3)
 
-    # Filter cohort if applicable
-    if cohort and "icd10" in d.columns:
-        if cohort.lower() == "cardiology":
-            d = d[d["icd10"].str.startswith("I", na=False)]
-        elif cohort.lower() == "oncology":
-            d = d[d["icd10"].str.startswith("C", na=False)]
+    if cohort and cohort.lower() == "cardiology" and col_icd:
+        d = d[d[col_icd].astype(str).str.upper().str.startswith("I")]  # I00–I99
+        if d.empty:
+            return {"summary": "No cardiology patients found.", "table_name": "patient_risk_scores", "table": []}
 
-    if d.empty:
-        return {"summary": f"No patients matched cohort '{cohort}'.", "table": []}
-
-    agg = (
-        d.groupby("patient_id")["risk_score"]
-        .mean()
-        .reset_index()
-        .rename(columns={"risk_score": "avg_risk_score"})
-        .sort_values("avg_risk_score", ascending=False)
+    # patient-level average
+    patient_avg = (
+        d.groupby(col_pt)["risk_score"]
+         .mean()
+         .reset_index()
+         .rename(columns={col_pt: "patient_id", "risk_score": "avg_risk_score"})
     )
 
-    summary = (
-        f"Top {len(agg.head(10))} highest-risk patients identified "
-        f"with mean risk scores between {agg['avg_risk_score'].head(10).min():.3f}–{agg['avg_risk_score'].head(10).max():.3f}."
-    )
+    if by_icd and col_icd:
+        # dominant ICD for each patient (by total charges)
+        icd_total = (
+            d.groupby([col_pt, col_icd])[col_amt]
+             .sum()
+             .reset_index()
+        )
+        idx = icd_total.groupby(col_pt)[col_amt].idxmax()
+        dom = icd_total.loc[idx].rename(columns={col_icd: "dominant_icd", col_amt: "icd_total_cost"})
+        out = patient_avg.merge(dom[[col_pt, "dominant_icd", "icd_total_cost"]], on=col_pt, how="left") \
+                         .rename(columns={col_pt: "patient_id"})
+    else:
+        out = patient_avg
 
-    return {"summary": summary, "table_name": "patient_risk_scores", "table": agg.head(10).to_dict(orient="records")}
+    out = out.sort_values("avg_risk_score", ascending=False).head(int(top_n))
+    summary = f"Top {len(out)} patients by risk score" + (" (with dominant ICD)" if by_icd and col_icd else "") + "."
+    return {"summary": summary, "table_name": "patient_risk_scores", "table": out.to_dict(orient="records")}
