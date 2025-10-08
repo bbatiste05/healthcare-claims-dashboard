@@ -324,49 +324,30 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                     if not result_payload.get("next_steps"):   
                         result_payload["next_steps"] = ["Review top cost driversand invesigate outliers by provider or diagnosis."]
 
-            # ✅ Flatten nested tables (the version that worked yesterday)
-            if "tables" in result_payload:
-                clean_tables = []
-                for t in result_payload["tables"]:
-                    if isinstance(t, str):
-                        try:
-                            parsed = json.loads(t.replace("'", '"'))
-                            clean_tables.extend(parsed if isinstance(parsed, list) else [parsed])
-                        except Exception:
-                            clean_tables.append({"Raw": t})
-                    elif isinstance(t, list):
-                        for row in t:
-                            if isinstance(row, dict):
-                                clean_tables.append(row)
+                    # ✅ Flatten table structure if nested under 'table' key
+                    if "tables" in result_payload:
+                        flattened = []
+                        for entry in result_payload["tables"]:
+                            if isinstance(entry, dict) and "table" in entry:
+                                table_data = entry["table"]
+                                if isinstance(table_data, list):
+                                    flattened.extend(table_data)
+                                elif isinstance(table_data, dict):
+                                    flattened.append(table_data)
+                                else:
+                                    flattened.append({"Value": str(table_data)})
+                            elif isinstance(entry, list):
+                                flattened.extend(entry)
+                            elif isinstance(entry, dict):
+                                flattened.append(entry)
                             else:
-                                clean_tables.append({"Value": str(row)})
-                    elif isinstance(t, dict):
-                        clean_tables.append(t)
+                                flattened.append({"Value": str(entry)})
 
-                final_rows = []
-                for row in clean_tables:
-                    if isinstance(row, dict):
-                        quarter = row.get("Quarter") or row.get("quarter") or ""
-                        codes = row.get("Top ICD-10 Codes") or row.get("ICD10") or row.get("icd") or []
-                        if isinstance(codes, list):
-                            for code_entry in codes:
-                                if isinstance(code_entry, dict):
-                                    final_rows.append({
-                                        "Quarter": quarter,
-                                        "ICD-10 Code": code_entry.get("ICD-10 Code") or code_entry.get("icd") or code_entry.get("Code"),
-                                        "Total Cost": code_entry.get("Total Cost") or code_entry.get("Cost") or code_entry.get("Charge"),
-                                        "Cost Share (%)": code_entry.get("Cost Share (%)") or code_entry.get("Share (%)"),
-                                    })
-                        else:
-                            final_rows.append({
-                                "Quarter": quarter,
-                                "ICD-10 Code": row.get("ICD-10 Code"),
-                                "Total Cost": row.get("Total Cost"),
-                                "Cost Share (%)": row.get("Cost Share (%)"),
-                            })
-
-            df_final = pd.DataFrame(final_rows).dropna(how="all").fillna("")
-            result_payload["tables"] = df_final.to_dict(orient="records")
+                        # Drop blank rows and normalize types
+                        df_flat = pd.DataFrame(flattened)
+                        if not df_flat.empty:
+                            df_flat = df_flat.fillna("")
+                        result_payload["tables"] = df_flat.to_dict(orient="records")
 
             # ✅ Ensure tables are preserved before fallback or overwrite
             if "tables" not in result_payload or not result_payload["tables"]:
