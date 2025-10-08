@@ -451,8 +451,12 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 result_payload["citations"] = ["patient_risk_scores.csv"]
             elif "fraud" in user_q.lower():
                 result_payload["citations"] = ["fraud_flags.csv"]
+            elif "cpt" in user_q.lower():
+                result_payload["citations"] = ["claims_df", "cpt.csv"]
+            elif "icd" in user_q.lower():
+                result_payload["citations"] = ["claims_df", "icd10.csv"]
             else:
-                result_payload["citations"] = ["claims_df.csv", "icd10_reference.csv"]
+                result_payload["citations"] = ["claims_df.csv"]
 
         return result_payload
 
