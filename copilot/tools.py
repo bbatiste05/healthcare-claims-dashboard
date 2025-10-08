@@ -107,19 +107,19 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None,
         top_mean = top["Total Cost"].mean()
 
         summary = (
-            f"Top {top_n} {label}s drove approximately ${total_cost:,.0f} in total billed costs"
-            + (f" during {period}" if period else "")
-            + f". The highest individual {label} "
+            f"Top {top_n} {label}s drove approximately ${total_cost:,.0f} in total billed costs. "
+            + (f" during {period}. " if period else "")
+            + f"The highest individual {label} "
             + (f"({top_code}) " if top_code else "")
             + f"accounts for about {top_share:.1f}% of all costs. "
             f"Average cost among the top {top_n} {label}s is roughly ${top_mean:,.0f}. "
-            "These results indicate that a small subset of procedure or diagnosis codes "
-            "dominate overall expenditures, suggesting potential targets for cost-containment review."
+            "These results indicate that a small subset of procedure or diagnosis codes. "
+            "suggesting potential targets for cost-containment review. "
         )
 
         context_note = (
             "Procedural (CPT) spending patterns may reflect utilization intensity or payer pricing differences."
-            if label.lower() == "cpt"
+            if label.lower().startswith("cpt")
             else "Diagnosis (ICD-10) patterns may highlight chronic or high-acuity case groups driving higher costs."
         )
         summary += " " + context_note
