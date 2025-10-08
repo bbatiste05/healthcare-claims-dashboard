@@ -47,95 +47,76 @@ def _require_cols(df: pd.DataFrame, needed: List[str]):
         raise ValueError(f"Missing required columns: {missing}")
 
 # ---------- TOOLS ----------
-
-def top_icd_cpt_cost(df: pd.DataFrame, icd: str = None, cpt: str = None,
-                     period: str = None, plan: str = None, top_n: int = 10) -> Dict[str, Any]:
+@_safe_run
+def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None,
+                     period=None, plan=None, top_n: int = 10, **kwargs):
     """
-    Return top cost drivers. If CPT data/column is missing or question asks ICD, falls back to ICD.
-    period accepts formats:
-      - '2024Q2'
-      - '2024-01:2024-06'  (inclusive range)
-      - None  (all data)
+    Identify top cost drivers by CPT or ICD code. 
+    Falls back intelligently between CPT and ICD if one is missing.
     """
     d = df.copy()
 
-    # column resolution
-    col_charge = _coerce_col(d, "charge_amount")
-    col_cpt    = _coerce_col(d, "cpt")
-    col_icd    = _coerce_col(d, "icd10")
-    col_date   = _find_date_col(d)
+    required = ["charge_amount"]
+    if not any(col in d.columns for col in ["cpt", "icd10"]):
+        raise ValueError("Dataset must include either 'cpt' or 'icd10' column.")
 
-    _require_cols(d, [col_charge])  # at minimum we need charge
+    # --- Optional period filter ---
+    if period:
+        # try to detect a usable date column
+        for c in ["claim_date", "service_date", "date_of_service", "dos"]:
+            if c in d.columns:
+                d[c] = pd.to_datetime(d[c], errors="coerce")
+                break
+        else:
+            c = None
 
-    # optional period filter
-    if col_date:
-        if period:
-            period = str(period).strip()
-            if "Q" in period and len(period) in (6, 7): # e.g. 2024Q2 / Q2 2024
-                year = int(period[:4]) if period[0].isdigit() else int(period[-4:])
-                q = int(period[-1])
-                start_month = (q-1)*3 + 1
-                end_month = start_month + 2
-                mask = (d[col_date].dt.year == year) & (d[col_date].dt.month.between(start_month, end_month))
-                d = d[mask]
-            elif ":" in period:
-                start_s, end_s = period.split(":")
+        if c:
+            year, q = None, None
+            if "Q" in period:
                 try:
-                    start = pd.to_datetime(start_s, errors="coerce")
-                    end   = pd.to_datetime(end_s, errors="coerce")
-                    d = d[(d[col_date] >= start) & (d[col_date] <= end)]
+                    year = int(period.split("Q")[0])
+                    q = int(period.split("Q")[1])
+                    month_range = {1: (1, 3), 2: (4, 6), 3: (7, 9), 4: (10, 12)}[q]
+                    d = d[d[c].dt.year == year]
+                    d = d[d[c].dt.month.between(*month_range)]
                 except Exception:
                     pass
 
-    # which axis to use?
-    prefer_cpt = bool(cpt) or ("cpt" in (icd or "").lower() and col_cpt)
-    use_cpt = bool(col_cpt) and prefer_cpt
-    use_icd = bool(col_icd) and not use_cpt
+    # --- CPT path preferred ---
+    code_col = "cpt" if "cpt" in d.columns and d["cpt"].notna().any() else "icd10"
+    label = "CPT Code" if code_col == "cpt" else "ICD-10 Code"
 
-    # if the user asked for CPT but we don't have CPT column → fallback to ICD
-    axis = None
-    if use_cpt:
-        axis = ("CPT Code", col_cpt)
-    elif use_icd:
-        axis = ("ICD-10 Code", col_icd)
-    elif col_cpt:
-        axis = ("CPT Code", col_cpt)
-    elif col_icd:
-        axis = ("ICD-10 Code", col_icd)
-    else:
-        # nothing to group by, return empty
-        total = float(d[col_charge].sum())
-        return {
-            "summary": "No CPT or ICD column found; cannot compute cost drivers.",
-            "table_name": "cost_drivers",
-            "table": []
-        }
-
-    label, col_group = axis
-
-    # aggregate
-    g = (
-        d.groupby(col_group)[col_charge]
+    # --- Aggregate ---
+    cost_df = (
+        d.groupby(code_col)["charge_amount"]
         .sum()
-        .sort_values(ascending=False)
         .reset_index()
-        .rename(columns={col_group: label, col_charge: "Total Cost"})
+        .rename(columns={code_col: label, "charge_amount": "Total Cost"})
     )
-    total_cost = float(g["Total Cost"].sum())
-    g["Cost Share (%)"] = g["Total Cost"].apply(lambda x: _pct(x, total_cost))
-    g = _top_n(g, top_n)
 
-    # summary
-    if period:
-        summary = f"Top {label.split()[0]} cost drivers for {period}."
-    else:
-        summary = f"Top {label.split()[0]} cost drivers across all claims."
+    total_sum = cost_df["Total Cost"].sum()
+    cost_df["Cost Share (%)"] = (cost_df["Total Cost"] / total_sum * 100).round(2)
+
+    top = cost_df.sort_values("Total Cost", ascending=False).head(top_n)
+
+    # --- Compose summary ---
+    summary = (
+        f"Top {top_n} {label}s driving total costs"
+        + (f" in {period}" if period else "")
+        + f". Highest single {label} accounts for {top.iloc[0]['Cost Share (%)']:.1f}% of total costs."
+    )
+
+    next_steps = [
+        f"Review utilization and billing volume for top {label}s.",
+        f"Cross-check with claim frequency by provider and period {period or 'overall'}.",
+        "Investigate if unusually high costs align with expected clinical mix.",
+    ]
 
     return {
         "summary": summary,
-        "table_name": "cost_drivers",
-        "table": g.to_dict(orient="records"),
-        "citations": ["claims_df"]
+        "table_name": f"top_{label.lower().replace(' ', '_')}_cost",
+        "table": top[[label, "Total Cost", "Cost Share (%)"]].to_dict(orient="records"),
+        "next_steps": next_steps,
     }
 
 
