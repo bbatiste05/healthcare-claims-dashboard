@@ -107,8 +107,8 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None,
         top_mean = top["Total Cost"].mean()
 
         summary = (
-            f"Top {top_n} {label}s drove approximately ${total_cost:,.0f} in total billed costs. "
-            + (f" during {period}. " if period else "")
+            f"Top {top_n} {label}s drove approximately ${total_cost:,.0f} in total billed costs "
+            + (f" during {period}. " if period else  "")
             + f"The highest individual {label} "
             + (f"({top_code}) " if top_code else "")
             + f"accounts for about {top_share:.1f}% of all costs. "
