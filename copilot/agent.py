@@ -268,7 +268,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
                 # If still empty, show a diagnostic message
                 if not tool_result.get("table"):
-                tool_result["table"] = [{"message": "No table data returned by this function."}]
+                    tool_result["table"] = [{"message": "No table data returned by this function."}]
 
                 # ✅ Normalize tool_result into valid JSON for GPT
                 if isinstance(tool_result, dict):
