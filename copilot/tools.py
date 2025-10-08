@@ -116,6 +116,13 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None,
             "These results indicate that a small subset of procedure or diagnosis codes "
             "dominate overall expenditures, suggesting potential targets for cost-containment review."
         )
+
+        context_note = (
+            "Procedural (CPT) spending patterns may reflect utilization intensity or payer pricing differences."
+            if label.lower() == "cpt"
+            else "Diagnosis (ICD-10) patterns may highlight chronic or high-acuity case groups driving higher costs."
+        )
+        summary += " " + context_note
     except Exception:
         summary = (
             f"Top {top_n} {label}s driving total costs"
