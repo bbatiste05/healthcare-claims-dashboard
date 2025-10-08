@@ -32,6 +32,10 @@ def run(claims_df):
             if "Table" in df_table.columns:
                 df_table = df_table[df_table["Table"] != "top_cpt_code_cost"]
 
+            for cpt_col in ["CPT", "CPT Code", "CPTCode"]:
+                if cpt_col in df_table.columns:
+                    df_table[cpt_col] = df_table[cpt_col].astype(str).str.replace(r"\.0+$", "", regex=True)
+
             df_table = df_table.fillna("")
             # Display formatted numeric columns cleanly
             rename_map = {
