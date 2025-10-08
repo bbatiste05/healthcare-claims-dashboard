@@ -270,20 +270,24 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 if not tool_result.get("table"):
                     tool_result["table"] = [{"message": "No table data returned by this function."}]
 
-                # ✅ Normalize tool_result into valid JSON for GPT
-                if isinstance(tool_result, dict):
-                    if "summary" not in tool_result:
-                        tool_result["summary"] = "Tool executed successfully."
-                    if "table" in tool_result and isinstance(tool_result["table"], pd.DataFrame):
-                        tool_result["table"] = tool_result["table"].to_dict(orient="records")
-                elif isinstance(tool_result, pd.DataFrame):
-                    tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
-                else:
-                    tool_result = {"summary": str(tool_result), "table": []}
+# ✅ Normalize tool_result into valid JSON for GPT
+if isinstance(tool_result, dict):
+    if "summary" not in tool_result:
+        tool_result["summary"] = "Tool executed successfully."
+    if "table" in tool_result and isinstance(tool_result["table"], pd.DataFrame):
+        tool_result["table"] = tool_result["table"].to_dict(orient="records")
+elif isinstance(tool_result, pd.DataFrame):
+    tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
+else:
+    tool_result = {"summary": str(tool_result), "table": []}
 
-                # ✅ Send back tool results to GPT for formatting
-                safe_tool_content = json.dumps(tool_result, default=str, indent=2)
-                tool_id = getattr(tc, "id", "tool_1")
+# ✅ Send back tool results to GPT for formatting
+try:
+    safe_tool_content = json.dumps(tool_result, default=str, indent=2)
+except Exception as e:
+    safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
+
+tool_id = getattr(tc, "id", "tool_1")
 
                 follow_messages = [
                     *messages,
