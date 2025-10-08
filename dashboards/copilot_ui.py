@@ -19,6 +19,35 @@ def run(claims_df):
     # 1) Get structured answer
     result = ask_gpt(user_q, claims_df, rag)
 
+            # --- Display the Copilot's response ---
+        st.markdown("### 📝 Summary")
+        for s in result.get("summary", []):
+            st.write(s)
+
+        # ✅ Display Table (formatted if available)
+        if result.get("tables"):
+            st.markdown("### 📊 Results Table")
+            df_table = pd.DataFrame(result["tables"])
+            if not df_table.empty:
+                # Display formatted numeric columns cleanly
+                st.dataframe(
+                    df_table.style.format({
+                        "Total Cost": "${:,.0f}",
+                        "Cost Share (%)": "{:.2f}%"
+                    })
+                )
+
+        # ✅ Display Next Steps if present
+        if result.get("next_steps"):
+            st.markdown("### ✅ Next Steps")
+            for step in result["next_steps"]:
+                st.write(f"- {step}")
+
+        # ✅ Optional: Show citations if you use RAG context
+        if result.get("citations"):
+            st.markdown("### 📚 Citations")
+            for c in result["citations"]:
+                st.write(f"- {c}")
     # 2) Render the summary
     st.subheader("Answer")
     summaries = result.get("summary", [])
