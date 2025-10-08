@@ -95,23 +95,44 @@ def _messages(user_q: str, rag: SimpleRAG) -> list:
     messages.append({"role": "user", "content": user_q})
     return messages
 
+# --- add this helper ---
+def _route_intent(user_q: str) -> str:
+    q = (user_q or "").lower()
+    # cost drivers / ICD / CPT
+    if any(k in q for k in ["cpt", "cost driver", "top cost", "highest cost", "charge amount", "icd"]):
+        return "top_icd_cpt_cost"
+    # anomalies & comparisons
+    if any(k in q for k in ["anomal", "outlier", "z-score", "z score", "compare", "q1 vs q2", "quarter"]):
+        return "provider_anomalies"
+    # fraud / frequency
+    if any(k in q for k in ["fraud", "excessive claim", "claims per patient"]):
+        return "fraud_flags"
+    # risk
+    if any(k in q for k in ["risk", "risk score"]):
+        return "risk_scoring"
+    return ""    
 
 # ------------------------------
 # 3. Call local Python tools
 # ------------------------------
 def _call_tool(name: str, args: Dict[str, Any], df: pd.DataFrame, user_q: str = ""):
-    user_q_lower = user_q.lower() if isinstance(user_q, str) else ""
-
-    if name == "top_icd_cpt_cost" or ("cost" in user_q_lower or "charge" in user_q_lower):
+    """Route by explicit tool name OR by question intent."""
+    pick = name or _route_intent(user_q)
+    if pick == "top_icd_cpt_cost":
         return top_icd_cpt_cost(df, **args)
-    elif name == "provider_anomalies" or ("provider" in user_q_lower or "quarter" in user_q_lower):
+    if pick == "provider_anomalies":
+        # support 'compare' if user asks e.g. "Q1 vs Q2 2024"
+        if "q1" in user_q.lower() and "q2" in user_q.lower():
+            args = {**args, "compare": "2024Q1_vs_2024Q2"}
         return provider_anomalies(df, **args)
-    elif name == "fraud_flags" or ("fraud" in user_q_lower or "claims per patient" in user_q_lower):
+    if pick == "fraud_flags":
         return fraud_flags(df, **args)
-    elif name == "risk_scoring" or ("risk" in user_q_lower or "cohort" in user_q_lower):
+    if pick == "risk_scoring":
+        # if user includes “by icd”
+        if "by icd" in user_q.lower() or "icd" in user_q.lower():
+            args = {**args, "by_icd": True}
         return risk_scoring(df, **args)
-
-    return {"summary": "No matching tool found for this query.", "table": []}
+    return {"summary": "No matching tool.", "table_name": "none", "table": []}
 
 
 # ------------------------------
@@ -126,6 +147,28 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
 
     result_payload = {"summary": [], "tables": [], "figures": [], "citations": [], "next_steps": []}
 
+    # --- 0) One-pass local autoroute (cheap & reliable) ---
+    try:
+        auto = _call_tool("", {}, df, user_q=user_q)
+        rows = auto.get("table", [])
+        if isinstance(rows, list) and len(rows) > 0:
+            # we already have a good, structured answer → format and return
+            result_payload["summary"] = [auto.get("summary", "")]
+            # normalize table: list[dict]
+            result_payload["tables"] = rows if isinstance(rows, list) else [rows]
+            if auto.get("table_name"):
+                # prepend a name row to keep your UI compatible
+                result_payload["tables"] = [{"Table": auto["table_name"]}] + result_payload["tables"]
+            result_payload["citations"] = auto.get("citations", [])
+            result_payload["next_steps"] = auto.get("next_steps", [])
+            return result_payload
+    except Exception:
+        pass
+
+    # --- (the rest of your existing ask_gpt logic can remain as-is) ---
+    # If you keep your current /chat.completions follow-up section, it will run
+    # when the LLM decides to call tools. The autoroute above simply gives you
+    # a fast, robust answer when the question is straightforward.
     try:
         # 1. Ask GPT (tool choice auto-enabled)
         resp = client.chat.completions.create(
