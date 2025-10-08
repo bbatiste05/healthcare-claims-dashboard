@@ -159,9 +159,10 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             if auto.get("table_name"):
                 table_rows = rows if isinstance(rows, list) else [rows]
                 # prepend a name row to keep your UI compatible
-               result_payload["tables"] = table_rows
+                result_payload["tables"] = table_rows
             else:
                 result_payload["tables"] = rows if isinstance(rows, list) else [rows]
+                
             result_payload["citations"] = auto.get("citations", [])
             result_payload["next_steps"] = auto.get("next_steps", [])
 
