@@ -156,11 +156,24 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             result_payload["summary"] = [auto.get("summary", "")]
             # normalize table: list[dict]
             result_payload["tables"] = rows if isinstance(rows, list) else [rows]
-            # if auto.get("table_name"):
+            if auto.get("table_name"):
                 # prepend a name row to keep your UI compatible
-               # result_payload["tables"] = [{"Table": auto["table_name"]}] + result_payload["tables"]
+               result_payload["tables"] = [{"Table": auto["table_name"]}] + result_payload["tables"]
             result_payload["citations"] = auto.get("citations", [])
             result_payload["next_steps"] = auto.get("next_steps", [])
+
+              # ✅ Ensure fallback citations exist even if autoroute returns early
+            if not result_payload.get("citations") or len(result_payload["citations"]) == 0:
+                if "provider" in user_q.lower():
+                    result_payload["citations"] = ["provider_anomalies.csv"]
+                elif "risk" in user_q.lower():
+                    result_payload["citations"] = ["patient_risk_scores.csv"]
+                elif "fraud" in user_q.lower():
+                    result_payload["citations"] = ["fraud_flags.csv"]
+                elif any(k in user_q.lower() for k in ["cpt", "icd", "cost", "charge"]):
+                    result_payload["citations"] = ["claims_df.csv", "icd10_reference.csv"]
+                else:
+                    result_payload["citations"] = ["claims_df.csv"]            
             return result_payload
     except Exception:
         pass
@@ -216,6 +229,19 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                         result_payload["tables"] = auto_tool_result["table"].to_dict(orient="records")
                     elif isinstance(auto_tool_result["table"], list):
                         result_payload["tables"] = auto_tool_result["table"]
+
+                # ✅ Ensure fallback citations exist before returning from GPT tool_call section
+                if not result_payload.get("citations") or len(result_payload["citations"]) == 0:
+                    if "provider" in user_q.lower():
+                        result_payload["citations"] = ["provider_anomalies.csv"]
+                    elif "risk" in user_q.lower():
+                        result_payload["citations"] = ["patient_risk_scores.csv"]
+                    elif "fraud" in user_q.lower():
+                        result_payload["citations"] = ["fraud_flags.csv"]
+                    elif any(k in user_q.lower() for k in ["cpt", "icd", "cost", "charge"]):
+                        result_payload["citations"] = ["claims_df.csv", "icd10_reference.csv"]
+                    else:
+                        result_payload["citations"] = ["claims_df.csv"]
                 return result_payload
 
 
@@ -382,6 +408,19 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             elif isinstance(result_payload["tables"], list) and isinstance(tool_result["table"], list):
                 result_payload["tables"].extend(tool_result["table"])
 
+          # ✅ Ensure fallback citations exist even if autoroute returns early
+        if not result_payload.get("citations") or len(result_payload["citations"]) == 0:
+            if "provider" in user_q.lower():
+                result_payload["citations"] = ["provider_anomalies.csv"]
+            elif "risk" in user_q.lower():
+                result_payload["citations"] = ["patient_risk_scores.csv"]
+            elif "fraud" in user_q.lower():
+                result_payload["citations"] = ["fraud_flags.csv"]
+            elif any(k in user_q.lower() for k in ["cpt", "icd", "cost", "charge"]):
+                result_payload["citations"] = ["claims_df.csv", "icd10_reference.csv"]
+            else:
+                result_payload["citations"] = ["claims_df.csv"]
+
         # 🧠 If GPT didn’t call any tool but query clearly matches a known intent → run manually
         if not msg.tool_calls and not auto_detected:
             user_q_lower = user_q.lower()
@@ -452,9 +491,9 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             elif "fraud" in user_q.lower():
                 result_payload["citations"] = ["fraud_flags.csv"]
             elif "cpt" in user_q.lower():
-                result_payload["citations"] = ["claims_df", "cpt.csv"]
+                result_payload["citations"] = ["claims_df.csv", "cpt.csv"]
             elif "icd" in user_q.lower():
-                result_payload["citations"] = ["claims_df", "icd10.csv"]
+                result_payload["citations"] = ["claims_df.csv", "icd10.csv"]
             else:
                 result_payload["citations"] = ["claims_df.csv"]
 
