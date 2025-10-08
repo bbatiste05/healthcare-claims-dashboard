@@ -270,24 +270,24 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 if not tool_result.get("table"):
                     tool_result["table"] = [{"message": "No table data returned by this function."}]
 
-# ✅ Normalize tool_result into valid JSON for GPT
-if isinstance(tool_result, dict):
-    if "summary" not in tool_result:
-        tool_result["summary"] = "Tool executed successfully."
-    if "table" in tool_result and isinstance(tool_result["table"], pd.DataFrame):
-        tool_result["table"] = tool_result["table"].to_dict(orient="records")
-elif isinstance(tool_result, pd.DataFrame):
-    tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
-else:
-    tool_result = {"summary": str(tool_result), "table": []}
+                # ✅ Normalize tool_result into valid JSON for GPT
+                if isinstance(tool_result, dict):
+                    if "summary" not in tool_result:
+                        tool_result["summary"] = "Tool executed successfully."
+                    if "table" in tool_result and isinstance(tool_result["table"], pd.DataFrame):
+                        tool_result["table"] = tool_result["table"].to_dict(orient="records")
+                elif isinstance(tool_result, pd.DataFrame):
+                    tool_result = {"summary": "DataFrame result", "table": tool_result.to_dict(orient="records")}
+                else:
+                    tool_result = {"summary": str(tool_result), "table": []}
 
-# ✅ Send back tool results to GPT for formatting
-try:
-    safe_tool_content = json.dumps(tool_result, default=str, indent=2)
-except Exception as e:
-    safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
+#                ✅ Send back tool results to GPT for formatting
+                try:
+                    safe_tool_content = json.dumps(tool_result, default=str, indent=2)
+                except Exception as e:
+                    safe_tool_content = json.dumps({"error": f"Serialization failed: {str(e)}"}, indent=2)
 
-tool_id = getattr(tc, "id", "tool_1")
+                tool_id = getattr(tc, "id", "tool_1")
 
                 follow_messages = [
                     *messages,
@@ -358,26 +358,29 @@ tool_id = getattr(tc, "id", "tool_1")
                         if not df_flat.empty:
                             df_flat = df_flat.fillna("")
                         result_payload["tables"] = df_flat.to_dict(orient="records")
+                except Exception as e:
+                    st.warning(f" error parsing GPT response: {e}")
+                    result_payload["summary"].append(final_answer)    
 
-            # ✅ Ensure tables are preserved before fallback or overwrite
-            if "tables" not in result_payload or not result_payload["tables"]:
-                result_payload["tables"] = df_final.to_dict(orient="records")
+        # ✅ Ensure tables are preserved before fallback or overwrite
+        if "tables" not in result_payload or not result_payload["tables"]:
+            result_payload["tables"] = df_final.to_dict(orient="records")
 
-            # ✅ If DataFrame accidentally serialized as string, fix it
-            elif isinstance(result_payload["tables"], str):
-                try:
-                    parsed_table = json.loads(result_payload["tables"].replace("'", '"'))
-                    if isinstance(parsed_table, list):
-                        result_payload["tables"] = parsed_table
-                except Exception:
-                    pass
+        # ✅ If DataFrame accidentally serialized as string, fix it
+        elif isinstance(result_payload["tables"], str):
+            try:
+                parsed_table = json.loads(result_payload["tables"].replace("'", '"'))
+                if isinstance(parsed_table, list):
+                    result_payload["tables"] = parsed_table
+            except Exception:
+                pass
 
-            # ✅ Force reattach any parsed table results before returning
-            if "table" in locals() and isinstance(tool_result, dict) and tool_result.get("table"):
-                if not result_payload.get("tables"):
-                    result_payload["tables"] = tool_result["table"]
-                elif isinstance(result_payload["tables"], list) and isinstance(tool_result["table"], list):
-                    result_payload["tables"].extend(tool_result["table"])
+        # ✅ Force reattach any parsed table results before returning
+        if "table" in locals() and isinstance(tool_result, dict) and tool_result.get("table"):
+            if not result_payload.get("tables"):
+                result_payload["tables"] = tool_result["table"]
+            elif isinstance(result_payload["tables"], list) and isinstance(tool_result["table"], list):
+                result_payload["tables"].extend(tool_result["table"])
 
         # 🧠 If GPT didn’t call any tool but query clearly matches a known intent → run manually
         if not msg.tool_calls and not auto_detected:
