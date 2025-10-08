@@ -47,7 +47,7 @@ def _require_cols(df: pd.DataFrame, needed: List[str]):
         raise ValueError(f"Missing required columns: {missing}")
 
 # ---------- TOOLS ----------
-@_safe_run
+
 def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None,
                      period=None, plan=None, top_n: int = 10, **kwargs):
     """
