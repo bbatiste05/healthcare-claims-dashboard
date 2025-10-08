@@ -29,7 +29,7 @@ def run(claims_df):
         st.markdown("### 📊 Results Table")
         df_table = pd.DataFrame(result["tables"])
         if not df_table.empty:
-            if "Table" in df_table_columns:
+            if "Table" in df_table.columns:
                 df_table = df_table[df_table["Table"] != "top_cpt_code_cost"]
 
             df_table = df_table.fillna("")
