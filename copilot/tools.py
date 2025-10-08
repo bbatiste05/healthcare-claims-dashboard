@@ -108,12 +108,12 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None,
 
         summary = (
             f"Top {top_n} {label}s drove approximately ${total_cost:,.0f} in total billed costs "
-            + (f" during {period}. " if period else  "")
+            + (f"during {period}. " if period else "")
             + f"The highest individual {label} "
             + (f"({top_code}) " if top_code else "")
             + f"accounts for about {top_share:.1f}% of all costs. "
             f"Average cost among the top {top_n} {label}s is roughly ${top_mean:,.0f}. "
-            "These results indicate that a small subset of procedure or diagnosis codes. "
+            "These results indicate that a small subset of procedure or diagnosis codes, "
             "suggesting potential targets for cost-containment review. "
         )
 
