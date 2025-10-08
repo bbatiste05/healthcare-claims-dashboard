@@ -102,7 +102,7 @@ def top_icd_cpt_cost(df: pd.DataFrame, icd=None, cpt=None,
     # --- Compose summary ---
     try:
         top_code = top.iloc[0][label] if label in top.columns else None
-        top_share = topiloc[0]["Cost Share (%)"]
+        top_share = top.iloc[0]["Cost Share (%)"]
         total_cost = top["Total Cost"].sum()
         top_mean = top["Total Cost"].mean()
 
