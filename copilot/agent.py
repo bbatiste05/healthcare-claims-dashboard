@@ -471,7 +471,7 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
         except Exception as e:
             st.warning(f"⚠️ Could not clean table column: {e}")
 
-          # ✅ Enrich short summaries into analytical insights
+        # ✅ Enrich short summaries into analytical insights
         if result_payload.get("summary"):
             enriched_summary = []
             for s in result_payload["summary"]:
