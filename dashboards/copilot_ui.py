@@ -22,7 +22,7 @@ def run(claims_df):
     # --- Display the Copilot's response ---
     st.markdown("### 📝 Summary")
     for s in result.get("summary", []):
-        st.write(s)
+        st.markdown(s.replace(". ", ". "))
 
     # ✅ Display Table (formatted if available)
     if result.get("tables"):
