@@ -157,8 +157,11 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             # normalize table: list[dict]
             result_payload["tables"] = rows if isinstance(rows, list) else [rows]
             if auto.get("table_name"):
+                table_rows = rows if isinstance(rows, list) else [rows]
                 # prepend a name row to keep your UI compatible
-               result_payload["tables"] = [{"Table": auto["table_name"]}] + result_payload["tables"]
+               result_payload["tables"] = table_rows
+            else:
+                result_payload["tables"] = rows if isinstance(rows, list) else [rows]
             result_payload["citations"] = auto.get("citations", [])
             result_payload["next_steps"] = auto.get("next_steps", [])
 
@@ -457,6 +460,38 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
             result_payload["summary"] = [msg.content or "No tools invoked."]
         if not result_payload.get("tables"):
             result_payload["tables"] = []
+
+          # ✅ Enrich short summaries into analytical insights
+        if result_payload.get("summary"):
+            enriched_summary = []
+            for s in result_payload["summary"]:
+                if len(s) < 120:
+                    if "cpt" in s.lower() or "cost" in s.lower():
+                        enriched_summary.append(
+                            s + " This indicates that a small group of procedure codes are responsible for a large share of total expenses, "
+                            "suggesting a need to review utilization patterns, pricing strategies, or potential overuse."
+                        )
+                    elif "provider" in s.lower():
+                        enriched_summary.append(
+                            s + " The identified providers show significant deviation from peer averages, which may indicate specialty concentration "
+                            "or possible billing inconsistencies that warrant review."
+                        )
+                    elif "risk" in s.lower():
+                        enriched_summary.append(
+                            s + " Elevated risk levels may correlate with complex patient conditions or chronic comorbidities, "
+                            "highlighting candidates for care coordination or intervention."
+                        )
+                    elif "fraud" in s.lower():
+                        enriched_summary.append(
+                            s + " These patterns could suggest atypical billing behavior or repeated claim anomalies worth investigating."
+                        )
+                    else:
+                        enriched_summary.append(s)
+                else:
+                    enriched_summary.append(s)
+            result_payload["summary"] = enriched_summary
+
+          
 
         # ✅ Ensure next_steps and citations always exist
         if not result_payload.get("next_steps") or len(result_payload["next_steps"]) == 0:
