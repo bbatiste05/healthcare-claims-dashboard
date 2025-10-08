@@ -320,13 +320,19 @@ def ask_gpt(user_q: str, df: pd.DataFrame, rag: SimpleRAG) -> Dict[str, Any]:
                 try:
                     parsed = json.loads(final_answer)
                     for k in result_payload.keys():
-                        result_payload[k] = parsed.get(k, result_payload[k])
+                        val = parsed.get(k)
+                        if isinstance(val, str):
+                            result_payload[k] = [val]
+                        elif val is not None:
+                            result_payload[k] = val
+                      
                     if not result_payload.get("next_steps"):   
                         result_payload["next_steps"] = ["Review top cost driversand invesigate outliers by provider or diagnosis."]
 
                     # ✅ Flatten table structure if nested under 'table' key
                     if "tables" in result_payload:
                         flattened = []
+                        
                         for entry in result_payload["tables"]:
                             if isinstance(entry, dict) and "table" in entry:
                                 table_data = entry["table"]
